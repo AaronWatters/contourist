@@ -83,7 +83,7 @@ class Grid2DContour(object):
 
     def __init__(self, horizontal_n, vertical_m, function, value, segment_endpoints=None, callback=None):
         """
-        Derive piecewise approximate countours for function(x,y) = value
+        Derive piecewise approximate countours for function(x,y) == value
         starting at points found between segment endpoints inside the grid 
         (0 .. horizontal_n-1, 0 .. vertical_m-1).
 
@@ -98,9 +98,9 @@ class Grid2DContour(object):
         value: float
             Value for contour
         segment_endpoints: [[(int, int), (int, int)] ...]
-            [(x0, y0), (x1, y1)] where f(x0, y0) * f(x1, y1) <= 0.
+            [(x0, y0), (x1, y1)] where (f(x0, y0)-value) * (f(x1, y1)-value) <= 0.
             Integral end points for segments crossing the contour.
-            The algorithm will produce at least one contour for each
+            The algorithm will produce at least one contour intersecting each
             endpoint pair provided.  Optional -- if omitted the
             algorithm will exhaustively search the adjacent grid for crossing
             grid point pairs.
