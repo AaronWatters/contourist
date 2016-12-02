@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>Example 09.15 - animation from md2 </title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r70/three.min.js"></script>
+<!-- <script src="three.js"></script> -->
+    <style>
+        body {
+            /* set margin to 0 and overflow to hidden, to go fullscreen */
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Div which will hold the Output -->
+<div id="WebGL-output">
+</div>
+
+<!-- Javascript code that runs our Three.js examples -->
+<script type="text/javascript">
+
+    // once everything is loaded, we run our Three.js stuff.
+    function init() {
+        debugger;
+
+        // create a scene, that will hold all our elements such as objects, cameras and lights.
+        var scene = new THREE.Scene();
+
+        // create a camera, which defines where we're looking at.
+        var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        // create a render and set the size
+        var webGLRenderer = new THREE.WebGLRenderer();
+        webGLRenderer.setClearColor(new THREE.Color(0xdddddd, 1.0));
+        webGLRenderer.setSize(window.innerWidth, window.innerHeight);
+        webGLRenderer.shadowMapEnabled = true;
+
+        // position and point the camera to the center of the scene
+        camera.position.x = -5;
+        camera.position.y = 4;
+        camera.position.z = 6;
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+
+        // add spotlight for the shadows
+        var spotLight = new THREE.SpotLight(0xffffff);
+        spotLight.position.set(-50, 70, 60);
+        spotLight.intensity = 1;
+        scene.add(spotLight);
+
+        // add the output of the renderer to the html element
+        document.getElementById("WebGL-output").appendChild(webGLRenderer.domElement);
+
+        // call the render function
+        var step = 0;
+
+        var mesh;
+        var clock = new THREE.Clock();
+
+        var loader = new THREE.JSONLoader();
+        var filename = "centered.js"; // "square.json";
+        loader.load(filename, function (geometry, mat) {
+            debugger;
+
+            geometry.computeFaceNormals();
+            geometry.computeVertexNormals();
+
+            var mat = new THREE.MeshNormalMaterial();
+            mat.side = THREE.DoubleSide;
+
+            mesh = THREE.SceneUtils.createMultiMaterialObject(geometry, [mat]);;
+
+            mesh.rotation.y = 0.7;
+
+            scene.add(mesh);
+        });
+
+        render();
+
+
+        function render() {
+            var delta = clock.getDelta();
+
+            if (mesh) {
+
+                mesh.rotation.x+=0.006;
+//                mesh.rotation.y+=0.006;
+            }
+
+
+            // render using requestAnimationFrame
+            requestAnimationFrame(render);
+            webGLRenderer.render(scene, camera);
+        }
+    }
+    window.onload = init;
+</script>
+</body>
+</html>

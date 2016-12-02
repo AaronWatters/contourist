@@ -3,8 +3,12 @@ Grid context for a function over 2 dimensions.
 """
 
 import numpy as np
+import grid_field
 
-class Function2DGrid(object):
+def Function2DGrid(xmin, ymin, xmax, ymax, dx, dy, function, materialize=False, cache=False):
+    return grid_field.FunctionGrid((xmin, ymin), (xmax, ymax), (dx, dy), function, materialize, cache)
+
+class Function2DGrid_xxx(object):
 
     def __init__(self, xmin, ymin, xmax, ymax, dx, dy, function, materialize=False, cache=False):
         self.mins = np.array((xmin, ymin), dtype=float)

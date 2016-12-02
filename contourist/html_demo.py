@@ -49,10 +49,10 @@ https://github.com/josdirksen/learning-threejs/blob/master/chapter-05/09-basic-3
         webGLRenderer.shadowMapEnabled = true;
         var triangulation = make_triangulation();
         scene.add(triangulation);
-        camera.position.x = -30;
-        camera.position.y = 40;
-        camera.position.z = 50;
-        camera.lookAt(new THREE.Vector3(10, 0, 0));
+        camera.position.x = %(camera_x)s;
+        camera.position.y = %(camera_y)s;
+        camera.position.z = %(camera_z)s;
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
         document.getElementById("%(target_div)s").appendChild(webGLRenderer.domElement);
         var step = 0;
 
@@ -111,7 +111,7 @@ https://github.com/josdirksen/learning-threejs/blob/master/chapter-05/09-basic-3
 
 """
 
-def grid_html_page(gridcontour, title="3d contour", load_three=load_three):
+def grid_html_page(gridcontour, title="3d contour", load_three=load_three, x=-30, y=40, z=50):
     (points, triangles) = gridcontour.get_points_and_triangles()
     vertices = "[%s]" % (",\n    ".join(map(str, map(list, points))))
     indices = "[%s]" % (",\n    ".join(map(str, map(list, triangles))))
@@ -121,7 +121,58 @@ def grid_html_page(gridcontour, title="3d contour", load_three=load_three):
     D["vertices"] = vertices
     D["indices"] = indices
     D["load_three"] = load_three
+    D["camera_x"] = x 
+    D["camera_y"] = y 
+    D["camera_z"] = z 
     return three_html_fullscreen % D
+
+json_template = """
+{
+    "metadata": {
+        "version": 4,
+        "type": "Geometry",
+        "generator": "GeometryExporter"
+    },
+    "faces": %(faces)s,
+    "vertices": %(vertices)s,
+    "normals": [],
+    "uvs": []
+}
+"""
+
+def emit_three_json(grid_contour):
+    (points, triangles) = grid_contour.get_points_and_triangles()
+    faces = []
+    for triangle in triangles:
+        faces.append("0")
+        for index in triangle:
+            faces.append(str(index))
+    vertices = []
+    for point in points:
+        for coordinate in point:
+            vertices.append(str(coordinate))
+    D = {}
+    D["faces"] = "[%s]" % (",\n".join(faces))
+    D["vertices"] = "[%s]" % (",\n".join(vertices))
+    return json_template % D
+
+def test_json():
+    import tetrahedral
+    from numpy.linalg import norm
+    def centered(x,y,z):
+        return norm([x, y, z])
+    endpoints = [((0,0,0), (100, 100, 100))]
+    I = tetrahedral.TriangulatedIsosurfaces((-1, -1, -1), (1, 1, 1), (0.25, 0.2, 0.33), centered, 1.3, endpoints)
+    print emit_three_json(I)
+
+def test_centered():
+    import tetrahedral
+    from numpy.linalg import norm
+    def centered(x,y,z):
+        return norm([x, y, z])
+    endpoints = [((0,0,0), (100, 100, 100))]
+    I = tetrahedral.TriangulatedIsosurfaces((-1, -1, -1), (1, 1, 1), (0.25, 0.2, 0.33), centered, 1.3, endpoints)
+    print grid_html_page(I, title="centered sphere", x=-3, y=1, z=2)
 
 def test_sphere():
     import tetrahedral
@@ -157,14 +208,14 @@ def test_torus(offset=5):
     G = tetrahedral.Grid3DContour(side, side, side,shift_torus, offset/3.0, [[(0,0,0), (offset+shift, shift, shift)]])
     print grid_html_page(G, title="torus")
 
-def test_wave(side=6, scale=0.2, title="wave"):
+def test_wave(side=20, scale=0.02, title="wave"):
     import tetrahedral
     import math
     def f(x,y,z):
         return 1.1 + math.sin(((x - side)**2 + (y - side)**2) * scale) - z
     side2 = 2 * side
     G = tetrahedral.Grid3DContour(side2, side2, side2, f, 0, [[(side, side,0), (20,20,20)]])
-    print grid_html_page(G)
+    print grid_html_page(G, "wave")
 
 if __name__ == "__main__":
     import sys

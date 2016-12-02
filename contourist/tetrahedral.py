@@ -5,7 +5,14 @@
 # Based on the algorithmic sketch described here:
 # http://paulbourke.net/geometry/polygonise/#tetra
 
+# todo:
+# grid search for 3d
+# average inverse distance to point set function
+# 
+
 import numpy as np
+import grid_field
+import triangulated
 
 # cube coordinates
 A = (0, 0, 0)
@@ -30,6 +37,28 @@ TETRAHEDRA = np.array([
 ], dtype=np.int)
 
 OFFSETS = np.array([(i,j,k) for i in (-1,0,1) for j in (-1,0,1) for k in (-1,0,1) if i!=0 or j!=0 or k!=0])
+
+
+class Delta3DContour(triangulated.ContourGrid):
+
+    def get_contour_maker(self, grid_endpoints):
+        grid = self.grid
+        (horizontal_n, vertical_m, forward_l) = grid.grid_dimensions
+        f = grid.grid_function
+        value = self.value
+        return Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints)
+
+    def get_points_and_triangles(self):
+        (grid_points, triangles) = self.contour_maker.get_points_and_triangles()
+        convert_point = self.grid.from_grid_coordinates
+        points = [convert_point(p) for p in grid_points]
+        return (points, triangles)
+
+class TriangulatedIsosurfaces(Delta3DContour):
+
+    def __init__(self, mins, maxes, delta, function, value, segment_endpoints):
+        grid = grid_field.FunctionGrid(mins, maxes, delta, function)
+        return Delta3DContour.__init__(self, grid, value, segment_endpoints)
 
 class Grid3DContour(object):
 
