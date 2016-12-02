@@ -26,7 +26,9 @@ def adjacent_pairs(low_pair, high_pair):
         adjacent_high = low_pair + adjacency_array[(high_index + hshift) % n_adjacencies]
         yield (tuple(adjacent_low), tuple(adjacent_high))
 
-class DxDy2DContourGrid(object):
+class ContourGrid(object):
+
+    "Shared functionality for 2d and 3d"
 
     def __init__(self, function_grid, value, segment_endpoints=None):
         """
@@ -46,10 +48,30 @@ class DxDy2DContourGrid(object):
             if len(grid_endpoints) < 1:
                 # default to grid search
                 grid_endpoints = None
-        # Contour value on grid is 0 because grid_function is shifted.
-        self.contour_maker = Grid2DContour(function_grid.horizontal_n, function_grid.vertical_m, 
-            function_grid.grid_function, self.value, grid_endpoints)
+        self.contour_maker = self.get_contour_maker(grid_endpoints)
+        #self.contour_maker = Grid2DContour(function_grid.horizontal_n, function_grid.vertical_m, 
+        #    function_grid.grid_function, self.value, grid_endpoints)
         self.grid_values = None
+
+    def to_grid_endpoint(self, start_xy, end_xy):
+        grid = self.grid
+        value = self.value
+        for start_grid in grid.surrounding_vertices(start_xy):
+            for end_grid in grid.surrounding_vertices(end_xy):
+                if not np.all(start_grid == end_grid):
+                    if (grid.grid_function(*start_grid)-value) * (grid.grid_function(*end_grid)-value) <= 0:
+                        return (start_grid, end_grid)
+        # default
+        return None
+
+
+class DxDy2DContourGrid(ContourGrid):
+
+    def get_contour_maker(self, grid_endpoints):
+        grid = self.grid
+        (horizontal_n, vertical_m) = grid.grid_dimensions
+        f = grid.grid_function
+        return Grid2DContour(horizontal_n, vertical_m, f, self.value, grid_endpoints)
 
     def get_contour_sequences(self):
         self.grid_contours = self.contour_maker.get_contour_sequences()
@@ -62,16 +84,6 @@ class DxDy2DContourGrid(object):
         xy_points = [grid.from_grid_coordinates(grid_point) for grid_point in grid_points]
         return (closed, xy_points)
 
-    def to_grid_endpoint(self, start_xy, end_xy):
-        grid = self.grid
-        value = self.value
-        for start_grid in grid.surrounding_vertices(start_xy):
-            for end_grid in grid.surrounding_vertices(end_xy):
-                if not np.all(start_grid == end_grid):
-                    if (grid.grid_function(*start_grid)-value) * (grid.grid_function(*end_grid)-value) <= 0:
-                        return (start_grid, end_grid)
-        # default
-        return None
 
 class DxDy2DContour(DxDy2DContourGrid):
 

@@ -249,14 +249,20 @@ class Grid3DContour(object):
                     high_point = mid_point
             for point in (low_point, high_point):
                 tpoint = tuple(point)
+                if tpoint in visited:
+                    continue
                 visited.add(tpoint)
                 if self.border_voxel(point):
                     new_voxels.add(tpoint)
+                    continue
                 for offset_point in (OFFSETS + point.reshape((1,3))):
                     toffset = tuple(offset_point)
+                    if toffset in visited:
+                        continue
                     visited.add(toffset)
                     if self.border_voxel(offset_point):
                         new_voxels.add(toffset)
+                        break
         #print "initial voxels", new_voxels
         self.new_surface_voxels = new_voxels
 
