@@ -9,7 +9,7 @@ and 3d isosurfaces.
 
 # Isosurfaces
 
-![Isosurface display example](isosurfaces.png)
+![Isosurface display example](isosurface.png)
 
 Here is a live jsfiddle demo of an isosurface displayed using jsfiddle:
 [https://jsfiddle.net/AaronWatters/9qszgyaj/](https://jsfiddle.net/AaronWatters/9qszgyaj/).
