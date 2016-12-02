@@ -2,6 +2,10 @@
 Generators for HTML5 presentations of contours.
 """
 
+import numpy as np
+from numpy.linalg import norm
+import tetrahedral
+
 load_three = """
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r70/three.min.js">
 </script>
@@ -129,7 +133,7 @@ def grid_html_page(gridcontour, title="3d contour", load_three=load_three, x=-30
 json_template = """
 {
     "metadata": {
-        "version": 4,
+        "version": 3,
         "type": "Geometry",
         "generator": "GeometryExporter"
     },
@@ -157,12 +161,32 @@ def emit_three_json(grid_contour):
     return json_template % D
 
 def test_json():
-    import tetrahedral
-    from numpy.linalg import norm
     def centered(x,y,z):
         return norm([x, y, z])
     endpoints = [((0,0,0), (100, 100, 100))]
     I = tetrahedral.TriangulatedIsosurfaces((-1, -1, -1), (1, 1, 1), (0.25, 0.2, 0.33), centered, 1.3, endpoints)
+    print emit_three_json(I)
+
+class AvgInvDistance(object):
+
+    def __init__(self, points):
+        self.points = np.array(points, dtype=np.float)
+
+    def __call__(self, *xyz):
+        xyz = np.array(xyz, dtype=np.float)
+        points = self.points
+        npoints = len(points) * 1.0
+        sum = 0.0
+        for p in points:
+            sum += 1.0/(1.0 + norm(xyz - p))
+        return sum / npoints
+
+def test_json2():
+    points = [[-1,-1,1], [1,-1,-1], [-1,1,-1], [1,1,1]]
+    #points = [[0,0,0]]
+    f = AvgInvDistance(points)
+    I = tetrahedral.TriangulatedIsosurfaces((-2, -2, -2), (2, 2, 2), (0.1, 0.1, 0.1), f, 0.363, [])
+    I.search_for_endpoints(skip=4)
     print emit_three_json(I)
 
 def test_centered():
