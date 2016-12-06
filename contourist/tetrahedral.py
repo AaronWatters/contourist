@@ -13,6 +13,7 @@
 import numpy as np
 import grid_field
 import triangulated
+import surface_geometry
 
 # cube coordinates
 A = (0, 0, 0)
@@ -196,6 +197,10 @@ class Grid3DContour(object):
         """
         Translate internal data structure representations to (list_of_points, set_of_triangle_indices).
         """
+        geometry = self.extract_surface_geometry()
+        return (geometry.vertices, geometry.oriented_triangles)
+
+    def extract_surface_geometry(self):
         triangle_pairs_set = set()
         for triple in self.triangle_pair_triples:
             triangle_pairs_set.update(triple)
@@ -206,9 +211,12 @@ class Grid3DContour(object):
         for triangle in self.triangle_pair_triples:
             index_set = frozenset(pair_number[pair] for pair in triangle)
             set_of_triangles_indices.add(index_set)
-        (list_of_points, set_of_triangles_indices) = clean_triangles(list_of_points, set_of_triangles_indices)
-        set_of_triangles_indices = orient_triangles(list_of_points, set_of_triangles_indices)
-        return (list_of_points, set_of_triangles_indices)
+        geometry = surface_geometry.SurfaceGeometry(list_of_points, set_of_triangles_indices)
+        geometry.clean_triangles()
+        geometry.orient_triangles()
+        #(list_of_points, set_of_triangles_indices) = clean_triangles(list_of_points, set_of_triangles_indices)
+        #set_of_triangles_indices = orient_triangles(list_of_points, set_of_triangles_indices)
+        return geometry
 
     def border_voxel(self, vertex):
         vertex = np.array(vertex, dtype=np.int)
@@ -288,7 +296,7 @@ class Grid3DContour(object):
 
     def in_range(self, point):
         """
-        Test whether an point is in the grid.
+        Test whether a point is in the grid.
         """
         return np.all(point >= 0) and np.all(point < self.corner)
 
