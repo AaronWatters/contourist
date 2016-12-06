@@ -14,7 +14,7 @@ class FunctionGrid(object):
         (self.dimension,) = self.mins.shape
         assert self.mins.shape == self.maxes.shape
         assert self.mins.shape == self.delta.shape
-        self.grid_maxes = self.to_grid_vertex(self.maxes) + 1  # xxx is +1 okay?
+        #self.grid_maxes = self.to_grid_vertex(self.maxes) + 1  # xxx is +1 okay?
         self.f = function
         self.cached = cache
         self.materialize = materialize
@@ -44,7 +44,7 @@ class FunctionGrid(object):
 
     def on_grid(self, grid_vertex):
         # xxxx boundary <= okay?
-        return np.all(grid_vertex >= 0) and np.all(grid_vertex <= self.grid_maxes)
+        return np.all(grid_vertex >= 0) and np.all(grid_vertex <= self.grid_dimensions)
 
     def surrounding_vertices(self, xypoint, skip=1, grid_vertex=False):
         if grid_vertex:
@@ -100,6 +100,7 @@ class FunctionGrid(object):
         for x in xy_grid:
             if not isinstance(x, int):
                 all_ints = False
+                break
         if m is not None and all_ints:
             try:
                 return m[xy_grid]
@@ -121,12 +122,12 @@ def iter_indices(shape, skip=1):
         yeild ()
     elif lshape == 1:
         (n,) = shape
-        for i in range(n):
+        for i in range(0, n, skip):
             yield (i,)
     else:
         n = shape[0]
         remainder = shape[1:]
-        rem_indices = list(iter_indices(remainder))
+        rem_indices = list(iter_indices(remainder, skip))
         for i in range(0, n, skip):
             head = (i,)
             for tail in rem_indices:
