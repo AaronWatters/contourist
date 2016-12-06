@@ -69,9 +69,19 @@ class TriangulatedIsosurfaces(Delta3DContour):
         grid = grid_field.FunctionGrid(mins, maxes, delta, function)
         return Delta3DContour.__init__(self, grid, value, segment_endpoints)
 
-class Grid3DContour(object):
 
-    def __init__(self, horizontal_n, vertical_m, forward_l, function, value, segment_endpoints, 
+def Grid3DContour(horizontal_n, vertical_m, forward_l, function, value, segment_endpoints, 
+        linear_interpolate=True, callback=None):
+    corner = (horizontal_n, vertical_m, forward_l)
+    return GridContour3d(corner, function, value, segment_endpoints, linear_interpolate, callback)
+
+class GridContour(object):
+
+    # define at subclass
+    box = None
+    offsets = None
+
+    def __init__(self, corner, function, value, segment_endpoints, 
         linear_interpolate=True, callback=None):
         """
         Derive surface triangularizations approximating the surface function(x,y,z) == value
@@ -100,11 +110,14 @@ class Grid3DContour(object):
             called as callback(self).
         """
         self.linear_interpolate = linear_interpolate
-        n = self.n = horizontal_n
-        m = self.m = vertical_m
-        l = self.l = forward_l
         self.end_points = segment_endpoints
-        self.corner = np.array([n, m, l], dtype=np.int)
+        corner = self.corner = np.array(corner, dtype=np.int)
+        (dimension,) = corner.shape
+        self.dimension = dimension
+        # check end_points
+        for (p1, p2) in segment_endpoints:
+            assert len(p1) == dimension
+            assert len(p2) == dimension
         self.f = function
         self.value = value
         # (i,j,k) vertices that cross the surface
@@ -118,14 +131,19 @@ class Grid3DContour(object):
         self.interpolated_contour_pairs = {}
         # Set of triangles containing sets of 3 pairs of adjacent
         # vertices with interpolated point on the triangle.
-        self.triangle_pair_triples = set()
+        self.simplex_sets = set()
         self.callback = callback
+        self.sanity_check()
 
-    def add_triangle(self, pair1, pair2, pair3):
-        pairs = frozenset(self.interpolate_pair(pair) for pair in (pair1, pair2, pair3))
-        if pairs in self.triangle_pair_triples:
-            raise ValueError("duplicate triangle " + repr(pairs))
-        self.triangle_pair_triples.add(pairs)
+    def sanity_check(self):
+        raise ValueError("sanity check must be implemented in subclass.")
+
+    def add_simplex(self, *pairs):
+        assert len(pairs) == self.dimension
+        pairs = frozenset(self.interpolate_pair(pair) for pair in pairs)
+        if pairs in self.simplex_sets:
+            raise ValueError("duplicate simplex " + repr(pairs))
+        self.simplex_sets.add(pairs)
 
     def interpolate_pair(self, pair):
         (p0, p1) = pair
@@ -139,88 +157,10 @@ class Grid3DContour(object):
         if callback:
             callback(self)
 
-    def get_points_and_triangles(self):
-        """
-        Return (list_of_points, set_of_triangles_indices) for triangles approximating the surface 
-             f(x,y,z) == value.
-        Where list_of_points is a sequence of 3d points on the surface and set_of triangles
-        is a set of set([i,j,k]) listing indices of points for each triangle on the triangulation.
-        """
-        self.find_initial_voxels()
-        while self.new_surface_voxels:
-            self.expand_voxels()
-        for triple in self.surface_voxels:
-            #print "enumerating", triple
-            self.enumerate_voxel_triangles(triple)
-        return self.extract_points_and_triangles()
-
-    def enumerate_voxel_triangles(self, triple):
-        triple = np.array(triple, dtype=np.int)
-        tetrahedra = TETRAHEDRA + triple.reshape((1,1,3))
-        for tetrahedron in tetrahedra:
-            #print "    tetrahedron", tetrahedron
-            self.enumerate_tetrahedron_triangles(tetrahedron)
-
-    def enumerate_tetrahedron_triangles(self, tetrahedron):
-        low_points = set()
-        high_points = set()
-        values = []
-        f = self.f
-        value = self.value
-        for p in tetrahedron:
-            tp = tuple(p)
-            pvalue = f(*tp)
-            values.append(pvalue)
-            # XXXX assymetry between low and high points?
-            if pvalue < value:
-                low_points.add(tp)
-            else:
-                high_points.add(tp)
-        if (not low_points) or (not high_points) or np.allclose(values, value):
-            # no triangles
-            return
-        leastpoints = low_points
-        mostpoints = high_points
-        if len(leastpoints) > len(mostpoints):
-            (leastpoints, mostpoints) = (mostpoints, leastpoints)
-        if len(leastpoints) == 1:
-            [a] = leastpoints
-            [b, c, d] = mostpoints
-            self.add_triangle((a,b), (a,c), (a,d))
-        else:
-            [a, b] = leastpoints
-            [c, d] = mostpoints
-            self.add_triangle((a,d), (a,c), (b,c))
-            self.add_triangle((a,d), (b,d), (b,c))
-
-    def extract_points_and_triangles(self):
-        """
-        Translate internal data structure representations to (list_of_points, set_of_triangle_indices).
-        """
-        geometry = self.extract_surface_geometry()
-        return (geometry.vertices, geometry.oriented_triangles)
-
-    def extract_surface_geometry(self):
-        triangle_pairs_set = set()
-        for triple in self.triangle_pair_triples:
-            triangle_pairs_set.update(triple)
-        pair_list = list(triangle_pairs_set)
-        pair_number = {pair: count for (count, pair) in enumerate(pair_list)}
-        list_of_points = [self.interpolated_contour_pairs[pair] for pair in pair_list]
-        set_of_triangles_indices = set()
-        for triangle in self.triangle_pair_triples:
-            index_set = frozenset(pair_number[pair] for pair in triangle)
-            set_of_triangles_indices.add(index_set)
-        geometry = surface_geometry.SurfaceGeometry(list_of_points, set_of_triangles_indices)
-        geometry.clean_triangles()
-        geometry.orient_triangles()
-        #(list_of_points, set_of_triangles_indices) = clean_triangles(list_of_points, set_of_triangles_indices)
-        #set_of_triangles_indices = orient_triangles(list_of_points, set_of_triangles_indices)
-        return geometry
-
     def border_voxel(self, vertex):
+        d = self.dimension
         vertex = np.array(vertex, dtype=np.int)
-        voxel_grid_points = vertex.reshape((1,3)) + CUBE
+        voxel_grid_points = vertex.reshape((1,d)) + self.box
         f = self.f
         function_values = [f(*p) for p in voxel_grid_points]
         # if the function values don't vary enough it's not on the border.
@@ -237,9 +177,11 @@ class Grid3DContour(object):
         """
         new_voxels = set()
         f = self.f
+        d = self.dimension
         value = self.value
         end_points = np.array(self.end_points, dtype=np.int)
         visited = self.visited_voxels
+        reshape = (1, d)
         for (low_point, high_point) in end_points:
             low_value = f(*low_point)
             high_value = f(*high_point)
@@ -263,7 +205,7 @@ class Grid3DContour(object):
                 if self.border_voxel(point):
                     new_voxels.add(tpoint)
                     continue
-                for offset_point in (OFFSETS + point.reshape((1,3))):
+                for offset_point in (OFFSETS + point.reshape(reshape)):
                     toffset = tuple(offset_point)
                     if toffset in visited:
                         continue
@@ -278,15 +220,17 @@ class Grid3DContour(object):
         """
         Add more unvisited voxels containing triangles on the surface.
         """
+        offsets = self.offsets
         horizon_voxels = self.new_surface_voxels
         new_voxels = set()
         visited = self.visited_voxels
         surface = self.surface_voxels
+        reshape = (1, self.dimension)
         for voxel in horizon_voxels:
             visited.add(voxel)
             surface.add(voxel)
             avoxel = np.array(voxel, dtype=np.int)
-            for aoffset in (OFFSETS + avoxel.reshape((1,3))):
+            for aoffset in (offsets + avoxel.reshape(reshape)):
                 toffset = tuple(aoffset)
                 if toffset not in visited and self.in_range(aoffset):
                     visited.add(toffset)
@@ -339,3 +283,90 @@ class Grid3DContour(object):
             assert interpolated is not None
             return ((low_point, high_point), interpolated)
         return interpolated
+
+class GridContour3d(GridContour):
+
+    box = CUBE
+    offsets = OFFSETS
+
+    def sanity_check(self):
+        assert self.dimension == 3
+
+    def get_points_and_triangles(self):
+        """
+        Return (list_of_points, set_of_triangles_indices) for triangles approximating the surface 
+             f(x,y,z) == value.
+        Where list_of_points is a sequence of 3d points on the surface and set_of triangles
+        is a set of set([i,j,k]) listing indices of points for each triangle on the triangulation.
+        """
+        self.find_initial_voxels()
+        while self.new_surface_voxels:
+            self.expand_voxels()
+        for triple in self.surface_voxels:
+            #print "enumerating", triple
+            self.enumerate_voxel_triangles(triple)
+        return self.extract_points_and_triangles()
+
+    def enumerate_voxel_triangles(self, triple):
+        triple = np.array(triple, dtype=np.int)
+        tetrahedra = TETRAHEDRA + triple.reshape((1,1,3))
+        for tetrahedron in tetrahedra:
+            #print "    tetrahedron", tetrahedron
+            self.enumerate_tetrahedron_triangles(tetrahedron)
+
+    def enumerate_tetrahedron_triangles(self, tetrahedron):
+        low_points = set()
+        high_points = set()
+        values = []
+        f = self.f
+        value = self.value
+        for p in tetrahedron:
+            tp = tuple(p)
+            pvalue = f(*tp)
+            values.append(pvalue)
+            # XXXX assymetry between low and high points?
+            if pvalue < value:
+                low_points.add(tp)
+            else:
+                high_points.add(tp)
+        if (not low_points) or (not high_points) or np.allclose(values, value):
+            # no triangles
+            return
+        leastpoints = low_points
+        mostpoints = high_points
+        if len(leastpoints) > len(mostpoints):
+            (leastpoints, mostpoints) = (mostpoints, leastpoints)
+        if len(leastpoints) == 1:
+            [a] = leastpoints
+            [b, c, d] = mostpoints
+            self.add_simplex((a,b), (a,c), (a,d))
+        else:
+            [a, b] = leastpoints
+            [c, d] = mostpoints
+            self.add_simplex((a,d), (a,c), (b,c))
+            self.add_simplex((a,d), (b,d), (b,c))
+
+    def extract_points_and_triangles(self):
+        """
+        Translate internal data structure representations to (list_of_points, set_of_triangle_indices).
+        """
+        geometry = self.extract_surface_geometry()
+        return (geometry.vertices, geometry.oriented_triangles)
+
+    def extract_surface_geometry(self):
+        triangle_pairs_set = set()
+        for triple in self.simplex_sets:
+            triangle_pairs_set.update(triple)
+        pair_list = list(triangle_pairs_set)
+        pair_number = {pair: count for (count, pair) in enumerate(pair_list)}
+        list_of_points = [self.interpolated_contour_pairs[pair] for pair in pair_list]
+        set_of_triangles_indices = set()
+        for triangle in self.simplex_sets:
+            index_set = frozenset(pair_number[pair] for pair in triangle)
+            set_of_triangles_indices.add(index_set)
+        geometry = surface_geometry.SurfaceGeometry(list_of_points, set_of_triangles_indices)
+        geometry.clean_triangles()
+        geometry.orient_triangles()
+        #(list_of_points, set_of_triangles_indices) = clean_triangles(list_of_points, set_of_triangles_indices)
+        #set_of_triangles_indices = orient_triangles(list_of_points, set_of_triangles_indices)
+        return geometry

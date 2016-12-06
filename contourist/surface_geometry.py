@@ -12,6 +12,7 @@ class SurfaceGeometry(object):
         self.vertex_map = tuple(range(len(vertices)))
 
     def clean_triangles(self):
+        "Remove area 0 triangles and duplicate vertices on area 0 triangles"
         list_of_points = self.input_vertices
         set_of_triangle_indices = self.input_triangles
         keep_triangles = set()
@@ -49,6 +50,7 @@ class SurfaceGeometry(object):
         return (keep_vertices, keep_triangles)
 
     def orient_triangles(self):
+        "Orient triangles so cross product of triangle vectors points outwards."
         list_of_points = self.vertices
         set_of_triangle_indices = self.triangles
         #print "orienting", len(set_of_triangle_indices), "triangles"
