@@ -107,7 +107,10 @@ class SurfaceGeometry(object):
             def orient_edge(index1, index2, from_triangle):
                 edge = frozenset((index1, index2))
                 triangles = segments_to_triangles[edge]
-                assert len(triangles) <= 2, repr(list(triangles))
+                #assert len(triangles) <= 2, repr(list(triangles))
+                if len(triangles) > 2:
+                    #print "ambiguous edge?", triangles
+                    pass
                 for triangle in triangles:
                     if triangle != from_triangle:
                         [index3] = triangle - edge
@@ -115,7 +118,8 @@ class SurfaceGeometry(object):
                         if triangle in triangle_orientations:
                             orientation1 = triangle_orientations[triangle]
                             if not same_orientation(orientation1, orientation):
-                                print "bad orientation?", orientation1, orientation
+                                #print "    bad orientation?", orientation1, orientation
+                                pass
                         else:
                             stack.append((triangle, orientation))
             while stack:
