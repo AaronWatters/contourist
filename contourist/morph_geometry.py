@@ -12,6 +12,7 @@ class MorphGeometry(object):
         self.mid_value = 0.5 * (min_value + max_value)
         self.triangle_4d_pairs = set()
         self.pair_4d_interpolation = {}
+        self.pair_value_interpolation = {}
         nvertices = len(vertices4d)
         self.start_vertices = {}
         self.end_vertices = {}
@@ -81,7 +82,13 @@ class MorphGeometry(object):
         self.pair_4d_interpolation.update(pair_interpolations)
         return pair_interpolations
 
-    def interpolate_pair_3d(self, value, vertex_index1, vertex_index2):
+    def interpolate_pair_3d(self, value, vertex_index1, vertex_index2, epsilon=1e-5):
+        pair_value_interpolation = self.pair_value_interpolation
+        if vertex_index1 > vertex_index2:
+            (vertex_index1, vertex_index2) = (vertex_index2, vertex_index1)
+        key = (value, vertex_index1, vertex_index2)
+        if key in pair_value_interpolation:
+            return pair_value_interpolation[key]
         vertices4d = self.vertices4d
         vertex1 = vertices4d[vertex_index1]
         vertex2 = vertices4d[vertex_index2]
@@ -92,14 +99,18 @@ class MorphGeometry(object):
         if v1 > v2:
             (vertex1, v1, vertex2, v2) = (vertex2, v2, vertex1, v1)
         if value < v1 or value > v2:
+            pair_value_interpolation[key] = None
             return None
         ratio = 0.0  # arbitrarily pick vertex1 on ambiguity
-        if not np.allclose(v1, v2):
-            ratio = (value - v1) * 1.0 / (v2 - v1)
+        diff = v2 - v1
+        if diff > epsilon: #not np.allclose(v1, v2):
+            ratio = (value - v1) * 1.0 / diff
         v1_3d = vertex1[:-1]
         v2_3d = vertex2[:-1]
         vertex3d = v1_3d + ratio * (v2_3d - v1_3d)
-        return (vertex3d, ratio)
+        result = (vertex3d, ratio)
+        pair_value_interpolation[key] = result
+        return result
 
     def get_start_and_end_surface_geometries(self):
         triangle_4d_pairs = self.triangle_4d_pairs
