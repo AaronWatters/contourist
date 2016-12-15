@@ -190,11 +190,15 @@ class GridContour4D(tetrahedral.GridContour):
             max_index += 1
         #print "done at", (max_index, nvalues)
 
-    def json_data(self, morphs=None):
+    def json_stats(self, morphs=None):
         if morphs is None:
             morphs = list(self.iterate_morph_geometry())
         min_value = morphs[0].min_value
         max_value = morphs[-1].max_value
+        return (morphs, min_value, max_value)
+
+    def json_data(self, morphs=None):
+        (morphs, min_value, max_value) = self.json_stats(morphs)
         morph_descriptions = [m.json_data() for m in morphs]
         D = {}
         D["min_value"] = min_value
@@ -202,47 +206,100 @@ class GridContour4D(tetrahedral.GridContour):
         D["morph_descriptions"] = morph_descriptions
         return D
 
-    def to_json(self, morphs=None):
+    def to_json0(self, morphs=None):
         import json
         return json.dumps(self.json_data(morphs), indent=4)
 
+    def to_json(self, morphs=None):
+        (morphs, min_value, max_value) = self.json_stats(morphs)
+        L = []
+        a = L.append
+        a("{\n")
+        a('"description": "Sequence of morphing triangularizations.",\n')
+        a('"max_value": %s,\n' % (max_value,))
+        a('"min_value": %s,\n' % (min_value,))
+        a('"number_of_morphs": %s,\n' % (len(morphs),))
+        morph_jsons = ",\n".join(m.to_json() for m in morphs)
+        a('"morph_descriptions": [\n%s]\n' % (morph_jsons,))
+        a("}")
+        return "".join(L)
+
 corner = np.array([8]*4, dtype=np.int)
 p1 = corner * 0.25
-p2 = p1 + p1
+p2 = corner * 0.5
 
 def test_f(*p):
     p = np.array(p, dtype=np.float)
     n0 = norm(p-p1)
     n1 = norm(p-p2)
     #return np.sin(n0+n1) + np.sin(n1 - n0/2)
-    return 1.0/(1+n0) + 1.0/(1+n1)
+    return 1.0/(.1+n0) + 1.0/(.1+n1)
+    #return max(n1, n0)
 
-def test0():
+def test0b():
     endpoints = [(corner, [4]*4)]
+    endpoints = [(corner, p1)]
     for x in endpoints:
         for y in x:
             print y, test_f(*y)
     #stop
-    value = 0.5
+    value = 0.3
     G = GridContour4D(corner, test_f, value, endpoints)
     G.find_tetrahedra()
     return G
 
-def test00():
-    corner = [2] * 4
-    center = [cx, cy, cz, ct] = [1,0,1,0]
+def diff(x, y, z, t):
+    c = 3
+    n1 = norm([x-c,z-c,(y-c)*0.25]) - t
+    n2 = norm([x-c,y-c,z*0.1]) - t*t
+    return min(n1, n2)
+
+def test0d():
+    corner = [6] * 4
+    endpoints = [([6,6,6,0], [6,6,6,6])]
+    for x in endpoints:
+        for y in x:
+            print y, diff(*y)
+    value = -1.0
+    G = GridContour4D(corner, diff, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0():
+    corner = [6] * 4
+    endpoints = [([0]*4, [3.14]*4)]
+    def f(*p):
+        p = (np.array(p, dtype=np.float) - 3)
+        d = np.cos(norm(p))
+        q = (np.cos(p)).sum()
+        return d + q
+    for x in endpoints:
+        for y in x:
+            print y, f(*y)
+    #stop
+    value = 0.0
+    G = GridContour4D(corner, f, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0c():
+    corner = [10] * 4
+    center = [cx, cy, cz, ct] = [1,1,1,1]
     center = [0] * 4
     def function(x,y,z,t):
-        return norm([x-cx, y-cy, t-ct])
-        return norm([x-cx, y-cy, z-cz, t-ct])
+        #return norm([x-cx, y-cy, t-ct])
+        return norm([x-cx, y-cy, t-ct]) / (norm([0.5*(x-cx), z-cz, 0.4*(t-ct)]) + 1)
     corner = [2] * 4
-    value = 1.5
-    endpoints = [(corner, center)]
+    value = 5.0
+    endpoints = [([0,1,0,1], center)]
+    for x in endpoints:
+        for y in x:
+            print y, function(*y)
     G = GridContour4D(corner, function, value, endpoints)
     G.find_tetrahedra()
     return G
 
-def test01():
+def test00():
     corner = [3] * 4
     def function(x,y,z,t):
         if norm([x-1, y-1, z-1, t-1]) < 0.1:
