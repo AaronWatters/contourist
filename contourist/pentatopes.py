@@ -197,10 +197,13 @@ class GridContour4D(tetrahedral.GridContour):
         # triangle triples as indices into segment_point_indices: set(frozenset(I^3))
         triangle_segment_indices = set(frozenset(segment_pair_to_index[p] for p in triangle) for triangle in triangles_pairs)
         # 3d projection midpoint for segment pairs: [R^3...]
-        pair_3d_midpoints = [0.5 * (vertices4d[i1][:3] + vertices4d[i2][:3]) for (i1, i2) in segment_point_indices]
-        triangle_orienter = surface_geometry.SurfaceGeometry(pair_3d_midpoints, triangle_segment_indices)
-        oriented_triangle_indices = list(triangle_orienter.orient_triangles())
-        return morph_geometry.MorphTriangles(vertices4d, segment_point_indices, oriented_triangle_indices)    
+        #pair_3d_midpoints = [0.5 * (vertices4d[i1][:3] + vertices4d[i2][:3]) for (i1, i2) in segment_point_indices]
+        #triangle_orienter = surface_geometry.SurfaceGeometry(pair_3d_midpoints, triangle_segment_indices)
+        #oriented_triangle_indices = list(triangle_orienter.orient_triangles())
+        #return morph_geometry.MorphTriangles(vertices4d, segment_point_indices, oriented_triangle_indices)    
+        result = morph_geometry.MorphTriangles(vertices4d, segment_point_indices, triangle_segment_indices)
+        result.orient_triangles()
+        return result
 
     def iterate_morph_geometry(self):
         interp = self.interpolated_contour_pairs

@@ -5,7 +5,10 @@ import surface_geometry
 class MorphTriangles(object):
 
     def __init__(self, points4d, segment_point_indices, triangle_segment_indices, epsilon=1e-5):
-        self.points4d = points4d
+        self.points4d = points4d = np.array(points4d)
+        t_values = points4d[:, -1]
+        self.max_value = t_values.max()
+        self.min_value = t_values.min()
         oriented_segment_point_indices = []
         for (i,j) in segment_point_indices:
             if points4d[i][-1] > points4d[j][-1]:
@@ -15,7 +18,9 @@ class MorphTriangles(object):
         self.segment_point_indices = oriented_segment_point_indices
         self.triangle_segment_indices = triangle_segment_indices
         min_t_triangle_order = []
-        triangle_max_t = {}
+        self.triangle_max_t = None
+        self.triangle_min_t = None
+        """"
         for (index, triangle) in enumerate(triangle_segment_indices):
             pairs = [tuple(oriented_segment_point_indices[i]) for i in triangle]
             # min and max must not go outside of range of segments
@@ -26,22 +31,62 @@ class MorphTriangles(object):
             assert min_t < max_t + epsilon, repr((min_t, max_t, early_points, late_points))
             min_t_triangle_order.append((min_t, index))
             triangle_max_t[index] = max_t
+            triangle_min_t[index]
         self.min_t_triangle_order = sorted(min_t_triangle_order)
         self.triangle_max_t = triangle_max_t
         #self.global_max_t = global_max_t
-        #self.global_min_t = global_min_t
+        #self.global_min_t = global_min_t"""
+
+    def orient_triangles(self):
+        "Orient triangles so right hand rule thumb points outward for all value of t."
+        self.compute_triangle_stats()
+        points4d = self.points4d
+        segment_point_indices = self.segment_point_indices
+        pair_3d_midpoints = [0.5 * (points4d[i1][:3] + points4d[i2][:3]) for (i1, i2) in segment_point_indices]
+        triangles = self.triangle_segment_indices
+        triangle_orienter = surface_geometry.SurfaceGeometry(pair_3d_midpoints, triangles)
+        compatible = self.time_compatible_triangles
+        oriented_triangle_indices = list(triangle_orienter.orient_triangles(compatible))
+        self.triangle_segment_indices = oriented_triangle_indices
+
+    def time_compatible_triangles(self, triangle1, triangle2):
+        "two triangles are compatible if they share an extent in time."
+        triangle_max_t = self.triangle_max_t
+        triangle_min_t = self.triangle_min_t
+        low_value = max(triangle_min_t[triangle1], triangle_min_t[triangle2])
+        high_value = min(triangle_max_t[triangle1], triangle_max_t[triangle2])
+        return (low_value < high_value)
+
+    def compute_triangle_stats(self):
+        "compute applicable t range for each triangle."
+        points4d = self.points4d
+        max_value = self.max_value
+        min_value = self.min_value
+        triangle_max_t = {}
+        triangle_min_t = {}
+        segments = self.segment_point_indices
+        for triangle in self.triangle_segment_indices:
+            t_min = min_value
+            t_max = max_value
+            for segment_index in triangle:
+                (i_low, i_high) = segments[segment_index]
+                low_t = points4d[i_low, -1]
+                high_t = points4d[i_high, -1]
+                t_min = max(t_min, low_t)   # restrict the range!
+                t_max = min(t_max, high_t)
+            triangle_max_t[triangle] = t_max
+            triangle_min_t[triangle] = t_min
+        self.triangle_max_t = triangle_max_t
+        self.triangle_min_t = triangle_min_t
 
     def to_json(self, maxint=9999, epsilon=1e-4):
         L = []
         a = L.append
-        points = np.array(self.points4d)
-        t_values = points[-1]
-        max_value = max(t_values)
-        min_value = min(t_values)
+        points = self.points4d
         a("{\n")
         a('"description": "Ordered 4d morphing triangles.",\n')
-        a('"max_value": %s,\n' % (max_value,))
-        a('"min_value": %s,\n' % (min_value))
+        a('"max_value": %s,\n' % (self.max_value,))
+        a('"min_value": %s,\n' % (self.min_value))
         points = np.array(self.points4d)
         segments = self.segment_point_indices
         triangles = self.triangle_segment_indices
@@ -57,8 +102,8 @@ class MorphTriangles(object):
         a('"positions": %s,\n' % (flatten_json_list(positions),))
         a('"segments": %s,\n' % (flatten_json_list(segments),))
         a('"triangles": %s,\n' % (flatten_json_list(triangles),))
-        a('"triangle_order": %s,\n' % (flatten_json_list(self.min_t_triangle_order),))
-        a('"triangle_max_t": %s,\n' % (flatten_json_list(self.triangle_max_t.items()),))
+        #a('"triangle_order": %s,\n' % (flatten_json_list(self.min_t_triangle_order),))
+        #a('"triangle_max_t": %s,\n' % (flatten_json_list(self.triangle_max_t.items()),))
         a("}")
         return "".join(L)
 

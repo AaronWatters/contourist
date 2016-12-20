@@ -49,8 +49,10 @@ class SurfaceGeometry(object):
         self.vertex_map = vertex_map
         return (keep_vertices, keep_triangles)
 
-    def orient_triangles(self):
+    def orient_triangles(self, compatible_triangle_test=None):
         "Orient triangles so cross product of triangle vectors points outwards."
+        if compatible_triangle_test is None:
+            compatible_triangle_test = lambda a, b: True
         list_of_points = self.vertices
         set_of_triangle_indices = self.triangles
         #print "orienting", len(set_of_triangle_indices), "triangles"
@@ -112,7 +114,7 @@ class SurfaceGeometry(object):
                     #print "ambiguous edge?", triangles
                     pass
                 for triangle in triangles:
-                    if triangle != from_triangle:
+                    if triangle != from_triangle and compatible_triangle_test(triangle, from_triangle):
                         [index3] = triangle - edge
                         orientation = (index1, index2, index3)
                         if triangle in triangle_orientations:
