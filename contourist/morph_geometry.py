@@ -2,6 +2,69 @@
 import numpy as np
 import surface_geometry
 
+class MorphTriangles(object):
+
+    def __init__(self, points4d, segment_point_indices, triangle_segment_indices, epsilon=1e-5):
+        self.points4d = points4d
+        oriented_segment_point_indices = []
+        for (i,j) in segment_point_indices:
+            if points4d[i][-1] > points4d[j][-1]:
+                oriented_segment_point_indices.append((j,i))
+            else:
+                oriented_segment_point_indices.append((i,j))
+        self.segment_point_indices = oriented_segment_point_indices
+        self.triangle_segment_indices = triangle_segment_indices
+        min_t_triangle_order = []
+        triangle_max_t = {}
+        for (index, triangle) in enumerate(triangle_segment_indices):
+            pairs = [tuple(oriented_segment_point_indices[i]) for i in triangle]
+            # min and max must not go outside of range of segments
+            early_points = [points4d[i] for (i,j) in pairs]
+            late_points = [points4d[j] for (i,j) in pairs]
+            min_t = max(p[-1] for p in early_points)
+            max_t = min(p[-1] for p in late_points)
+            assert min_t < max_t + epsilon, repr((min_t, max_t, early_points, late_points))
+            min_t_triangle_order.append((min_t, index))
+            triangle_max_t[index] = max_t
+        self.min_t_triangle_order = sorted(min_t_triangle_order)
+        self.triangle_max_t = triangle_max_t
+        #self.global_max_t = global_max_t
+        #self.global_min_t = global_min_t
+
+    def to_json(self, maxint=9999, epsilon=1e-4):
+        L = []
+        a = L.append
+        points = np.array(self.points4d)
+        t_values = points[-1]
+        max_value = max(t_values)
+        min_value = min(t_values)
+        a("{\n")
+        a('"description": "Ordered 4d morphing triangles.",\n')
+        a('"max_value": %s,\n' % (max_value,))
+        a('"min_value": %s,\n' % (min_value))
+        points = np.array(self.points4d)
+        segments = self.segment_point_indices
+        triangles = self.triangle_segment_indices
+        a('"counts": [%s, %s, %s],\n' % (len(points), len(segments), len(triangles),))
+        maxima = points.max(axis=0)
+        minima = points.min(axis=0)
+        diff = np.maximum(maxima - minima, epsilon)
+        a('"shift": [%s, %s, %s, %s],\n' % tuple(minima))
+        scale = diff / maxint
+        a('"scale": [%s, %s, %s, %s],\n' % tuple(scale))
+        invscale = (1.0/scale).reshape((1,4))
+        positions = ((points - minima.reshape(1,4)) * invscale).astype(np.int)
+        a('"positions": %s,\n' % (flatten_json_list(positions),))
+        a('"segments": %s,\n' % (flatten_json_list(segments),))
+        a('"triangles": %s,\n' % (flatten_json_list(triangles),))
+        a('"triangle_order": %s,\n' % (flatten_json_list(self.min_t_triangle_order),))
+        a('"triangle_max_t": %s,\n' % (flatten_json_list(self.triangle_max_t.items()),))
+        a("}")
+        return "".join(L)
+
+def flatten_json_list(sequence, fmt=str):
+    return "[%s]" % (",\n".join(",".join(fmt(y) for y in x) for x in sequence),)
+
 class MorphGeometry(object):
 
     def __init__(self, min_value, max_value, vertices4d):
@@ -17,9 +80,20 @@ class MorphGeometry(object):
         self.start_vertices = {}
         self.end_vertices = {}
 
-    def add_tetrahedron(self, tetrahedron):
+    def triangulate_tetrahedron_at_midpoints(self, tetrahedron, epsilon=1e-4):
+        vertices4d = self.vertices4d
+        breakpoints = sorted(vertices4d[i][-1] for i in tetrahedron)
+        previous = None
+        for current in breakpoints:
+            if previous is not None and (current - previous) > epsilon:
+                midpoint = 0.5 * (current + previous)
+                self.add_tetrahedron(tetrahedron, midpoint)
+            previous = current
+
+    def add_tetrahedron(self, tetrahedron, mid_value=None):
         (a, b, c, d) = sorted(tetrahedron)
-        mid_value = self.mid_value
+        if mid_value is None:
+            mid_value = self.mid_value
         pair_interpolations = {}
         triangle_4d_pairs = self.triangle_4d_pairs
         for pair in ((a,b), (a,c), (a,d), (b,c), (b,d), (c,d)):
@@ -59,39 +133,6 @@ class MorphGeometry(object):
                 assert type(i) is int, repr(i)
             interp = pair_interpolation[pair]
             assert len(interp) == 3, repr(interp)
-
-    def add_tetrahedron0(self, tetrahedron):
-        (a, b, c, d) = sorted(tetrahedron)
-        mid_value = self.mid_value
-        pair_interpolations = {}
-        pair0 = pair1 = None
-        interp0 = interp1 = None
-        triangle_4d_pairs = self.triangle_4d_pairs
-        for pair in ((a,b), (a,c), (a,d), (b,c), (b,d), (c,d)):
-            interpolation = self.interpolate_pair_3d(mid_value, *pair)
-            #print "interp", pair, interpolation
-            if interpolation is not None:
-                p_interpolation = interpolation[0]
-                pair_interpolations[pair] = p_interpolation
-                #print "comparing", (interp0, p_interpolation)
-                if pair0 is None:
-                    pair0 = pair
-                    interp0 = p_interpolation
-                elif pair1 is None and not np.allclose(interp0, p_interpolation):
-                    pair1 = pair
-                    interp1 = p_interpolation
-        if pair0 is None:
-            return None   # tetrahedron is out of range
-        assert len(pair_interpolations) > 2, "bad tetrahedron: " + repr(tetrahedron)
-        for pair in pair_interpolations:
-            if pair != pair0 and pair != pair1:
-                interpolation = pair_interpolations[pair]
-                if True: #not (np.allclose(interpolation, interp0) or np.allclose(interpolation, interp1)):
-                    triangle_pairs = frozenset([pair0, pair1, pair])
-                    triangle_4d_pairs.add(triangle_pairs)
-        #self.check_interpolation(pair_interpolation)
-        self.pair_4d_interpolation.update(pair_interpolations)
-        return pair_interpolations
 
     def interpolate_pair_3d(self, value, vertex_index1, vertex_index2, epsilon=1e-5, force=False):
         pair_value_interpolation = self.pair_value_interpolation
@@ -241,6 +282,25 @@ def test2():
     C = pentatopes.GridContour4D([0]*4, None, 0.0, [])
     return C.to_json([G])
 
+def testMt():
+    import pentatopes
+    def f(x,y,z,t):
+        return x + t
+    endpoints = [([0] * 4, [1] * 4)]
+    C = pentatopes.GridContour4D([2]*4, f, 1.0, endpoints)
+    C.find_tetrahedra()
+    Mt = C.collect_morph_triangles()
+    print (Mt.to_json())
+
+def testMorphTriangles():
+    points4d = [(0,0,0,0), (0,0,1,0), (2,3,2,3), (3,2,3,5)]
+    segment_point_indices = [(0,1), (1,2), (0,2), (1,3)]
+    triangle_segment_indices = [(0,1,2), (0,2,3)]
+    Mt = MorphTriangles(points4d, segment_point_indices, triangle_segment_indices)
+    print (Mt.to_json())
+
 if __name__ == "__main__":
     #test()
-    print (test2())
+    #print (test2())
+    #testMorphTriangles()
+    testMt()

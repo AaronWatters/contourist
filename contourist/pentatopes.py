@@ -5,6 +5,7 @@
 # generalized from tetrahedral.py
 import tetrahedral
 import morph_geometry
+import surface_geometry
 import itertools
 import numpy as np
 from numpy.linalg import norm
@@ -148,6 +149,59 @@ class GridContour4D(tetrahedral.GridContour):
                 global_max = max(max_value, global_max)
         return (sorted(order_pairs), global_max)
 
+    def collect_morph_triangles(self, epsilon=1e-7):
+        # 4d grid edge pairs to edge interpolation: (I^4, I^4) --> R^4
+        interp = self.interpolated_contour_pairs
+        # ordering of grid edge pairs: [(I^4, I^4)...]
+        pair_order = list(interp.keys())
+        # ordering inverse map for grid edge pairs: (I^4, I^4) --> int
+        pair_to_index = {frozenset(pair): index for (index, pair) in enumerate(pair_order)}
+        # ordered interpolation for pairs [R^4, ...]
+        vertices4d = np.array([interp[pair] for pair in pair_order])
+        triangle_collector = morph_geometry.MorphGeometry(0, 1, vertices4d)
+        # Set of 4-sets of pairs set(frozenset((I^4, I^4)^4))
+        tetrahedra = self.simplex_sets
+        # Set of index quadruples set(frozenset(I^4))
+        index_tetrahedra = set(frozenset(pair_to_index[frozenset(pair)] for pair in tetrahedron) for tetrahedron in tetrahedra)
+        for tetrahedron in index_tetrahedra:
+            #print "triangulating", tetrahedron
+            triangle_collector.triangulate_tetrahedron_at_midpoints(tetrahedron)
+        #pair_3d_midpoints = [0.5 * (np.array(a[:3]) + np.array(b[:3])) for (a, b) in pair_order]
+        # set of triples of pairs of indices into vertices4d (or pair_order) set(frozenset((I^2)^2))
+        triangles_pairs = set(triangle_collector.triangle_4d_pairs)
+        # ??? remove triangles with any segment that has 0 time extent
+        #print "triangle_pairs", list(triangles_pairs)[:2]
+        t_values = vertices4d[:,-1]
+        t_epsilon = epsilon * (t_values.max() - t_values.min())
+        #print "t_epsilon", t_epsilon
+        for triangle in list(triangles_pairs):
+            remove = False
+            for (i1, i2) in triangle:
+                diff = vertices4d[i1][-1] - vertices4d[i2][-1]
+                if abs(diff) <= t_epsilon:
+                    remove = True
+                    break
+            if remove:
+                print "removing", triangle
+                triangles_pairs.remove(triangle)
+        # ... end of triangle removal experimental code ...
+        # set of pair of indices into vertices4d set(I^2)
+        segment_point_index_set = set()
+        for pairs in triangles_pairs:
+            segment_point_index_set.update(pairs)
+        # list of pairs of indices into vertices4d: [I^2...]
+        segment_point_indices = list(segment_point_index_set)
+        # index lookup for pairs: 
+        segment_pair_to_index = {segment_pair: index for (index, segment_pair) in enumerate(segment_point_indices)}
+        #print "s_p_i", segment_pair_to_index.items()[:2]
+        # triangle triples as indices into segment_point_indices: set(frozenset(I^3))
+        triangle_segment_indices = set(frozenset(segment_pair_to_index[p] for p in triangle) for triangle in triangles_pairs)
+        # 3d projection midpoint for segment pairs: [R^3...]
+        pair_3d_midpoints = [0.5 * (vertices4d[i1][:3] + vertices4d[i2][:3]) for (i1, i2) in segment_point_indices]
+        triangle_orienter = surface_geometry.SurfaceGeometry(pair_3d_midpoints, triangle_segment_indices)
+        oriented_triangle_indices = list(triangle_orienter.orient_triangles())
+        return morph_geometry.MorphTriangles(vertices4d, segment_point_indices, oriented_triangle_indices)    
+
     def iterate_morph_geometry(self):
         interp = self.interpolated_contour_pairs
         pair_order = list(interp.keys())
@@ -265,7 +319,7 @@ def test0d():
     G.find_tetrahedra()
     return G
 
-def test0():
+def test0x():
     corner = [6] * 4
     endpoints = [([0]*4, [3.14]*4)]
     def f(*p):
@@ -299,7 +353,7 @@ def test0c():
     G.find_tetrahedra()
     return G
 
-def test00():
+def test0():
     corner = [3] * 4
     def function(x,y,z,t):
         if norm([x-1, y-1, z-1, t-1]) < 0.1:
@@ -310,6 +364,21 @@ def test00():
     corner = [7] * 4
     value = 3
     endpoints = [(corner, (1,1,1,1))]
+    G = GridContour4D(corner, function, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0p():
+    corner = [2] * 4
+    c = 1
+    def function(x,y,z,t):
+        #return x+y+z+t
+        #return x + y + t
+        if max(abs(x-c), abs(y-c), abs(z-c), abs(t-c)) < 0.1:
+            return 2
+        return 0
+    value = 1
+    endpoints = [([c]*4, [0]*4)]
     G = GridContour4D(corner, function, value, endpoints)
     G.find_tetrahedra()
     return G

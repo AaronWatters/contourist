@@ -133,4 +133,4 @@ class SurfaceGeometry(object):
                 orient_edge(b, a,  triangle)
                 orient_edge(a, c, triangle)
         self.oriented_triangles = list(sorted(triangle_orientations.values()))
-        return self.orient_triangles
+        return self.oriented_triangles
