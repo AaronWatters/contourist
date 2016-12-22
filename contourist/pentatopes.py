@@ -322,8 +322,22 @@ def test0d():
     G.find_tetrahedra()
     return G
 
-def test0x():
-    corner = [6] * 4
+def test0bad():
+    corner = [7] * 4
+    endpoints = [([0.0]*4, [1]*4)]
+    def f(x,y,z,t):
+        return abs((t%3) + np.sin(x)+ np.sin(y)+ np.sin(z))
+    for x in endpoints:
+        for y in x:
+            print y, f(*y)
+    #stop
+    value = 3
+    G = GridContour4D(corner, f, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0knobs():
+    corner = [7] * 4
     endpoints = [([0]*4, [3.14]*4)]
     def f(*p):
         p = (np.array(p, dtype=np.float) - 3)
@@ -339,15 +353,107 @@ def test0x():
     G.find_tetrahedra()
     return G
 
-def test0c():
+offsets = np.array([
+    (0,0,0),
+    (-1,-1,1),
+    (1,-1,-1),
+    (-1,1,-1),
+    (-1,-1,-1),
+])
+center = 4
+center2 = center*2
+
+def test0():
+    corner = [center2] * 4
+    def function(x,y,z,t):
+        x = x % 3
+        y = y % 3
+        z = z % 3
+        p1 = 0.5 * (center2 - t)
+        p2 = 0.5 * t
+        #return sphere
+        #plane = x+y
+        bar1= norm([x,y])
+        bar2= norm([x,z])
+        sphere = norm([x,y,z])
+        #return plane
+        return p1 * sphere + p2 * min(bar1, bar2)
+    endpoints = [([0]*4, [center] * 3 + [0]), ([3,2,1,0], [3,3,3,center2])]
+    for x in endpoints:
+        for y in x:
+            print y, function(*y)
+    #stop
+    value = 2.0
+    G = GridContour4D(corner, function, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0division():
+    corner = [center2] * 4
+    def function(x,y,z,t):
+        sphere = norm([x-center,y-center,z-center])
+        p1 = 0.5 * (center2 - t)
+        p2 = 0.5 * t
+        #return sphere
+        #plane = x+y
+        sphere2 = norm([x-center,y-center,z])
+        sphere3 = norm([x-center2,y-center2,z-center])
+        #return plane
+        return p1 * sphere + p2 * min(sphere3, sphere2)
+    endpoints = [([0]*4, [center] * 3 + [0])]
+    for x in endpoints:
+        for y in x:
+            print y, function(*y)
+    #stop
+    value = 12.0
+    G = GridContour4D(corner, function, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0tadpole():
+    corner = [center*2] * 4
+    def function(x,y,z,t):
+        xyz = np.array([x,y,z], dtype=np.float)
+        toffsets = offsets * ((t+0.1) * 1.0/center) + center
+        norms = norm(toffsets - xyz.reshape((1,3)), axis=1)
+        #print norms
+        #return norms.sum()
+        return (1.0/(1.0+norms)).sum()
+    endpoints = [([0]*4, [center] * 3 + [0])]
+    for x in endpoints:
+        for y in x:
+            print y, function(*y)
+    #stop
+    value = 1.5
+    G = GridContour4D(corner, function, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0weird():
+    c = 4
+    corner = [c*2] * 4
+    def torus_function(x,y,z,t):
+        alpha = norm((x-c,y-c))
+        p = np.array((alpha, z-c))
+        return norm(t - p)
+    endpoints = [([0]*4, [c]*4)]
+    for x in endpoints:
+        for y in x:
+            print y, torus_function(*y)
+    value = 6.0
+    G = GridContour4D(corner, torus_function, value, endpoints)
+    G.find_tetrahedra()
+    return G
+
+def test0slow():
     corner = [10] * 4
     center = [cx, cy, cz, ct] = [1,1,1,1]
     center = [0] * 4
     def function(x,y,z,t):
         #return norm([x-cx, y-cy, t-ct])
         return norm([x-cx, y-cy, t-ct]) / (norm([0.5*(x-cx), z-cz, 0.4*(t-ct)]) + 1)
-    corner = [2] * 4
-    value = 5.0
+    corner = [10] * 4
+    value = 0.6
     endpoints = [([0,1,0,1], center)]
     for x in endpoints:
         for y in x:
@@ -356,7 +462,7 @@ def test0c():
     G.find_tetrahedra()
     return G
 
-def test0():
+def test0s():
     corner = [3] * 4
     def function(x,y,z,t):
         if norm([x-1, y-1, z-1, t-1]) < 0.1:

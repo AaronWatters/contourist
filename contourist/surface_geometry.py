@@ -59,14 +59,15 @@ class SurfaceGeometry(object):
         segments_to_triangles = {}
         triangle_orientations = {}
         points_to_triangles_indices = {}
-        for triangle in set_of_triangle_indices:
+        # XXXX is this a bug?  Sometimes triangles have less than 3 vertices???
+        unoriented_triangles = set(x for x in set_of_triangle_indices if len(x) == 3)
+        for triangle in unoriented_triangles:
             for i in triangle:
                 points_to_triangles_indices.setdefault(i, set()).add(triangle)
             (a, b, c) = triangle
             for edge in ((a,b), (b,c), (a,c)):
                 s_edge = frozenset(edge)
                 segments_to_triangles.setdefault(s_edge, set()).add(triangle)
-        unoriented_triangles = set(set_of_triangle_indices)
         while unoriented_triangles:
             #print "unoriented", len(unoriented_triangles)
             #vertex_indices = set(p for p in triangle for triangle in unoriented_triangles)

@@ -121,9 +121,10 @@ class GridContour(object):
         (dimension,) = corner.shape
         self.dimension = dimension
         # check end_points
-        for (p1, p2) in segment_endpoints:
-            assert len(p1) == dimension
-            assert len(p2) == dimension
+        if segment_endpoints is not None:
+            for (p1, p2) in segment_endpoints:
+                assert len(p1) == dimension
+                assert len(p2) == dimension
         self.f = function
         self.value = value
         # (i,j,k) vertices that cross the surface

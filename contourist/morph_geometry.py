@@ -79,7 +79,7 @@ class MorphTriangles(object):
         self.triangle_max_t = triangle_max_t
         self.triangle_min_t = triangle_min_t
 
-    def to_json(self, maxint=9999, epsilon=1e-4):
+    def to_json(self, maxint=999999, epsilon=1e-4):
         L = []
         a = L.append
         points = self.points4d

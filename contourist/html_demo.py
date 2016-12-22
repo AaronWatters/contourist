@@ -189,6 +189,45 @@ def test_json2():
     I.search_for_endpoints(skip=4)
     print emit_three_json(I)
 
+def test_pepper():
+    f = open("misc/pepper.raw", "rb")
+    scans_linear = np.fromfile(f, np.int16)
+    rows = 180; columns = 140; nscans=100
+    linear = rows*columns
+    scans = np.zeros((nscans, rows, columns), dtype=int)
+    for scani in range(nscans):
+        offset = scani * linear
+        data = scans_linear[offset: offset + linear]
+        scans[scani] = data.reshape((rows, columns))
+    skip = 2
+    rshape = (rscans, rrows, rcolumns) = (nscans//skip, rows//skip, columns//skip)
+    reduced = np.zeros(rshape)
+    for scan in range(0, nscans, skip):
+        for row in range(0, rows, skip):
+            for column in range(0, columns, skip):
+                sl = max(scan - skip, 0)
+                su = min(scan + 2*skip, nscans-1)
+                rl = max(row - skip, 0)
+                ru = min(row + 2*skip, rows-1)
+                cl = max(column - skip, 0)
+                cu = min(column + 2*skip, columns-1)
+                reduced[scan//skip, row//skip, column//skip] = np.mean(scans[sl:su, rl:ru, cl:cu])
+    def pepper(x,y,z):
+        return reduced[int(x), int(y), int(z)]
+    side = 40
+    r = reduced[:side,:side,:side]
+    #print r.max(), r.min()
+    value = 40.0
+    endpoints = [([10,10,2], [10,10,18])]
+    value = 300.0
+    endpoints = []
+    #for x in endpoints:
+    #    for y in x:
+    #        print y, pepper(*y)
+    I = tetrahedral.TriangulatedIsosurfaces([0]*3, [side]*3, [1]*3, pepper, value, endpoints)
+    I.search_for_endpoints()
+    print grid_html_page(I, title="tooth", x=-60, y=-20, z=2)
+
 def test_centered():
     import tetrahedral
     from numpy.linalg import norm
