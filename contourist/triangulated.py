@@ -139,6 +139,7 @@ class Grid2DContour(object):
         self.callback = callback
         # [(closed, point_sequence), ...] for contours found
         self.contours = []
+        self.triangle_triples = set()
 
     def search_grid(self, skip=1):
         "Search the grid for additional verticals or horizontals that cross the contours."
@@ -201,6 +202,7 @@ class Grid2DContour(object):
             else:
                 pair = unvisited.pop()
                 closed = True
+            last_pair = None
             while pair is not None:
                 # fix the orientation of each end point
                 (low, high) = pair
@@ -222,7 +224,14 @@ class Grid2DContour(object):
                         #    edge_pairs.remove(adjacent)
                         next_pair = adjacent
                         break
+                if last_pair is not None:
+                    triple = frozenset(pair + last_pair)
+                    assert len(triple) == 3
+                    #print "pair", pair, "last_pair", last_pair, "triple", triple
+                    self.triangle_triples.add(triple)
+                last_pair = pair
                 pair = next_pair
+            #print "done"
             if np.allclose(new_contour[0], new_contour[-1]):
                 closed = True
             contours.append((closed, np.array(new_contour)))
