@@ -9,9 +9,12 @@ class FunctionGrid(object):
 
     def __init__(self, mins, maxes, delta, function, materialize=False, cache=False):
         self.mins = np.array(mins, dtype=float)
-        self.maxes = np.array(maxes, dtype=float)
-        self.delta = np.array(delta, dtype=float)
-        (self.dimension,) = self.mins.shape
+        minshape = self.mins.shape
+        self.maxes = np.zeros(minshape, dtype=float)
+        self.maxes[:] = maxes
+        self.delta = np.zeros(minshape, dtype=float)
+        self.delta[:] = delta
+        (self.dimension,) = minshape
         assert self.mins.shape == self.maxes.shape
         assert self.mins.shape == self.delta.shape
         #self.grid_maxes = self.to_grid_vertex(self.maxes) + 1  # xxx is +1 okay?
