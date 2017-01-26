@@ -4,8 +4,10 @@
 
 # generalized from tetrahedral.py
 import tetrahedral
+import triangulated
 import morph_geometry
 import surface_geometry
+import grid_field
 import itertools
 import numpy as np
 from numpy.linalg import norm
@@ -36,13 +38,43 @@ OFFSETS4D = np.array(
      if i!=0 or j!=0 or k!=0 or l!=0],
     dtype=np.int)
 
+
+class Delta4DContour(tetrahedral.Delta3DContour):
+
+    def get_contour_maker(self, grid_endpoints):
+        grid = self.grid
+        corner = grid.grid_dimensions
+        f = grid.grid_function
+        value = self.value
+        return GridContour4D(corner, f, value, grid_endpoints)
+
+    def collect_morph_triangles(self):
+        contour_maker = self.contour_maker
+        contour_maker.find_tetrahedra()
+        grid_morph_triangles = contour_maker.collect_morph_triangles()
+        return grid_morph_triangles.from_grid_coordinates(self.grid)
+
+
+class MorphingIsoSurfaces(Delta4DContour):
+
+    def __init__(self, mins, maxes, delta, function, value, segment_endpoints):
+        self.grid = grid_field.FunctionGrid(mins, maxes, delta, function)
+        return Delta4DContour.__init__(self, self.grid, value, segment_endpoints)
+
+    def to_json(self):
+        morph_triangles = self.collect_morph_triangles()
+        min_t = self.grid.mins[-1]
+        max_t = self.grid.maxes[-1]
+        return morph_triangles.to_json(min_value=min_t, max_value=max_t)
+
+
 class GridContour4D(tetrahedral.GridContour):
 
     box = HYPERCUBE
     offsets = OFFSETS4D
 
     def sanity_check(self):
-        assert self.dimension == 4
+        assert self.dimension == 4, "dimension should be 4 " + repr(self.dimension)
 
     def find_tetrahedra(self):
         self.find_initial_voxels()

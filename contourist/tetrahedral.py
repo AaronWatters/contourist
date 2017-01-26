@@ -51,6 +51,7 @@ class Delta3DContour(triangulated.ContourGrid):
     def get_contour_maker(self, grid_endpoints):
         grid = self.grid
         (horizontal_n, vertical_m, forward_l) = grid.grid_dimensions
+        self.grid_endpoints = grid_endpoints
         f = grid.grid_function
         value = self.value
         return Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints)
@@ -61,6 +62,7 @@ class Delta3DContour(triangulated.ContourGrid):
         if not grid.materialize:
             grid.cached = True
         (maxf, minf, grid_endpoints) = grid.find_contour_crossing_grid_segments(self.value, skip)
+        self.grid_endpoints = grid_endpoints
         self.contour_maker = self.get_contour_maker(grid_endpoints)
 
     def get_points_and_triangles(self):
