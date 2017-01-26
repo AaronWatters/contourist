@@ -1,5 +1,6 @@
+// This module assumes the availability of THREE and jQuery
 
-THREE.morph_triangles = function(morph_triangle_data, scene, duration, material) {
+THREE.morph_triangles = function(morph_triangle_data, scene, duration, material, after_tick) {
     var mesh = null;
     var clock = new THREE.Clock();
     var max_value = morph_triangle_data["max_value"];
@@ -23,15 +24,29 @@ THREE.morph_triangles = function(morph_triangle_data, scene, duration, material)
 
     // All coordinates shifted and scaled after input conversion.
     var positions = unflatten_list(morph_triangle_data["positions"], 4);
+    var min_position = null;
+    var max_position = null;
     for (var i=0; i<positions.length; i++) {
         var position = positions[i];
-        for (j=0; j<4; j++) {
+        for (var j=0; j<4; j++) {
             position[j] = shift[j] + scale[j] * position[j];
+            if (min_position != null) {
+                if (position[j] < min_position[j]) { min_position[j] = position[j]; }
+                if (position[j] > max_position[j]) { max_position[j] = position[j]; }
+            }
         }
+        if (min_position == null) {
+            min_position = position.slice();
+            max_position = position.slice();
+        }
+    }
+    var center_position = [];
+    for (var j=0; j<4; j++) {
+        center_position.push(0.5 * (min_position[j] + max_position[j]));
     }
     var t_extent = (max_value - min_value) * 1.0;
     var epsilon = t_extent * 1e-7;
-    var current_t = min_value;
+    var current_t = min_value + epsilon;
     var segments = unflatten_list(morph_triangle_data["segments"], 2);
     var triangles = unflatten_list(morph_triangle_data["triangles"], 3);
     // Compute triangle order and triangle max using calculated positions.
@@ -146,10 +161,12 @@ THREE.morph_triangles = function(morph_triangle_data, scene, duration, material)
                 ratio = (t_value - e_t) * 1.0 / diff;
             }
             if (ratio + epsilon < 0) {
-                throw new Error("negative segment interpolation");
+                return p_early;
+                //throw new Error("negative segment interpolation " + ratio);
             }
             if (ratio - epsilon > 1) {
-                throw new Error("over extended segment interpolation");
+                return p_late;
+                //throw new Error("over extended segment interpolation " + ratio);
             }
             interp_3d = []
             for (var i=0; i<3; i++) {
@@ -231,19 +248,54 @@ THREE.morph_triangles = function(morph_triangle_data, scene, duration, material)
             if (influence < 1.0) {
                 // COMMENTED FOR DEBUG
                 mesh.morphTargetInfluences[0] = influence;
+                current_t = min_t + (max_t - min_t) * influence;
             } else {
                 current_t = max_t;
                 start_transition();
             }
         }
-    }
+        if (after_tick) { after_tick(); }
+    };
+
+    var set_current_time = function(t) {
+        // set the current time in input coordinates to t.
+        current_t = t;
+        if ((current_t < min_t) || (current_t > max_t)) {
+            // switch the transition geometry
+            start_transition();
+        }
+        // adjust the clock transition start to reflect the right relative duration.
+        var elapsed = (current_t - min_t) * (1.0 / t_units_per_second);
+        var now = clock.getElapsedTime();
+        transition_start = now - elapsed;
+    };
+
+    var get_current_time = function() {
+        return current_t;
+    };
 
     var get_mesh = function() {
         return mesh;
-    }
+    };
 
     return {
         tick: tick,
-        get_mesh: get_mesh
+        get_mesh: get_mesh,
+        get_current_time: get_current_time,
+        set_current_time: set_current_time,
+        min: min_position,
+        max: max_position,
+        center: center_position
     }
 };
+
+THREE.morph_triangles.load = function(url, scene, duration, material, after_tick, on_success) {
+    var json_success = function(data) {
+        var sequence = THREE.morph_triangles(data, scene, duration, material, after_tick);
+        if (on_success) {
+            on_success(data, sequence);
+        }
+    }
+    jQuery.getJSON(url, json_success);
+};
+
