@@ -37,9 +37,9 @@
 				document.body.appendChild( container );
 
 				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 15000 );
-				camera.position.z = -1;
-                camera.position.y = -5;
-                camera.position.x = -1;
+				camera.position.z = -3;
+                camera.position.y = -3;
+                camera.position.x = -3;
                 camera.lookAt(new THREE.Vector3(0, 0, 0));
 
 				scene = new THREE.Scene();
@@ -66,7 +66,7 @@
 				// patch the normals
 				debugger;
 				var duration = 30.0;
-				//duration = 5.0;
+				duration = 5.0;
 				//sequence = THREE.morph_triangles(triangle_data, scene, duration, material);
 
 				var load_success = function (data, seq) {
