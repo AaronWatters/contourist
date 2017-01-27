@@ -22,3 +22,12 @@ for some function f, some value v and (x,y,z) varying in some specified volume.
 Here is a live demo of an isosurface displayed using jsfiddle:
 [https://jsfiddle.net/AaronWatters/9qszgyaj/](https://jsfiddle.net/AaronWatters/9qszgyaj/).
 
+# Morphing 3d Isosurfaces
+
+A morphing isosurface represents the point set satisfying f(x,y,z,t) = v
+for some function f, some value v and (x,y,z,t) varying in some specified volume
+and time extent.  It displays a smoothy evolving isosurface for f(x,y,z,t0) = v
+as t0 smoothly transitions from a minimum to a maximum time value.
+
+Here is a live demo of a morphing isosurface displayed using jsfiddle:
+[https://jsfiddle.net/AaronWatters/x35crpb0/](https://jsfiddle.net/AaronWatters/x35crpb0/).
