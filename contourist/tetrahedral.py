@@ -161,6 +161,30 @@ class GridContour(object):
         self.interpolated_contour_pairs[oriented] = interpolated
         return oriented
 
+    def remove_tiny_simplices(self, epsilon=1e-4):
+        "collapse tiny simplices into a single interpolated point"
+        count = 0
+        simplex_sets = self.simplex_sets
+        interpolated = self.interpolated_contour_pairs
+        keep_simplex_sets = set()
+        invcorner = 1.0 / self.corner
+        for simplex in simplex_sets:
+            points = np.vstack(list(interpolated[pair] for pair in simplex))
+            pmax = points.max(axis=0)
+            pmin = points.min(axis=0)
+            delta = (pmax - pmin) * invcorner
+            if delta.max() < epsilon:
+                # collapse the simplex
+                count += 1
+                merge_point = points[0]
+                for pair in simplex:
+                    interpolated[pair] = merge_point
+            else:
+                keep_simplex_sets.add(simplex)
+        self.collapsed_simplices = count
+        print "collapsed", count, "simplices"
+        self.simplex_sets = keep_simplex_sets
+
     def check_callback(self):
         "for testing and debugging."
         callback = self.callback
@@ -316,6 +340,7 @@ class GridContour3d(GridContour):
         for triple in self.surface_voxels:
             #print "enumerating", triple
             self.enumerate_voxel_triangles(triple)
+        self.remove_tiny_simplices()
         return self.extract_points_and_triangles(clean)
 
     def enumerate_voxel_triangles(self, triple):
