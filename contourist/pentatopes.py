@@ -82,6 +82,63 @@ class GridContour4D(tetrahedral.GridContour):
             self.expand_voxels()
         for quad in self.surface_voxels:
             self.enumerate_voxel_tetrahedra(quad)
+        self.bin_times()
+        self.drop_instant_tetrahedra()
+        self.remove_tiny_simplices(epsilon=1e-3)
+
+    def bin_times(self, nbins=100):
+        min_interval = self.corner[-1] * (1.0 / nbins)
+        interpolated = self.interpolated_contour_pairs
+        for pair in interpolated:
+            interp = interpolated[pair]
+            tvalue = interp[-1]
+            bin = int(tvalue / min_interval)
+            interp[-1] = bin * min_interval
+
+    def drop_instant_tetrahedra(self, epsilon=1e-7):
+        count = 0
+        simplex_sets = self.simplex_sets
+        interpolated = self.interpolated_contour_pairs
+        keep_simplex_sets = set()
+        for simplex in simplex_sets:
+            points = np.vstack(list(interpolated[pair] for pair in simplex))
+            tvals = points[:, -1]
+            tmax = tvals.max()
+            tmin = tvals.min()
+            delta = tmax - tmin
+            if delta < epsilon:
+                # drop it.
+                count += 1
+            else:
+                keep_simplex_sets.add(simplex)
+        self.dropped_simplices = count
+        print "dropped", count, "simplices"
+        self.simplex_sets = keep_simplex_sets
+
+    def xxx_rectify_short_transitions(self, ntransitions=100):
+        "For tetrahedra with short time duration, make them instantaneous."
+        # DOESN'T WORK.
+        count = 0
+        simplex_sets = self.simplex_sets
+        interpolated = self.interpolated_contour_pairs
+        keep_simplex_sets = set()
+        min_interval = self.corner[-1] * (1.0 / ntransitions)
+        for simplex in simplex_sets:
+            points = np.vstack(list(interpolated[pair] for pair in simplex))
+            tvals = points[:, -1]
+            tmax = tvals.max()
+            tmin = tvals.min()
+            delta = tmax - tmin
+            if delta < min_interval:
+                # rectify the points and forget the instantaneous simplex
+                count += 1
+                for pair in simplex:
+                    interpolated[pair][-1] = tmin
+            else:
+                keep_simplex_sets.add(simplex)
+        self.rectified_simplices = count
+        print "rectified", count, "simplices"
+        self.simplex_sets = keep_simplex_sets
  
     def enumerate_voxel_tetrahedra(self, quad):
         quad = np.array(quad, dtype=np.int)
