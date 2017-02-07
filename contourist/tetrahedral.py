@@ -48,13 +48,16 @@ OFFSETS = np.array(
 
 class Delta3DContour(triangulated.ContourGrid):
 
+    linear_interpolate = True   # default
+
     def get_contour_maker(self, grid_endpoints):
         grid = self.grid
         (horizontal_n, vertical_m, forward_l) = grid.grid_dimensions
         self.grid_endpoints = grid_endpoints
         f = grid.grid_function
         value = self.value
-        return Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints)
+        return Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints,
+                linear_interpolate=self.linear_interpolate)
 
     def search_for_endpoints(self, skip=1):
         # turn on grid caching
@@ -73,9 +76,11 @@ class Delta3DContour(triangulated.ContourGrid):
 
 class TriangulatedIsosurfaces(Delta3DContour):
 
-    def __init__(self, mins, maxes, delta, function, value, segment_endpoints):
+    def __init__(self, mins, maxes, delta, function, value, segment_endpoints,
+            linear_interpolate=True):
         grid = grid_field.FunctionGrid(mins, maxes, delta, function)
-        return Delta3DContour.__init__(self, grid, value, segment_endpoints)
+        return Delta3DContour.__init__(self, grid, value, segment_endpoints,
+                linear_interpolate=linear_interpolate)
 
 
 def Grid3DContour(horizontal_n, vertical_m, forward_l, function, value, segment_endpoints, 
@@ -315,7 +320,10 @@ class GridContour(object):
                 interpolated = low_a + ratio * (high_a - low_a)
                 fint = f(*interpolated)
         if swap:
-            assert interpolated is not None
+            #assert interpolated is not None
+            # XXXX temporary hack!!!
+            if interpolated is None:
+                interpolated = low_a
             return ((low_point, high_point), interpolated)
         return interpolated
 

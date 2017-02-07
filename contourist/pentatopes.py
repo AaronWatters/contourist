@@ -46,7 +46,8 @@ class Delta4DContour(tetrahedral.Delta3DContour):
         corner = grid.grid_dimensions
         f = grid.grid_function
         value = self.value
-        return GridContour4D(corner, f, value, grid_endpoints)
+        interpolate = self.linear_interpolate
+        return GridContour4D(corner, f, value, grid_endpoints, linear_interpolate=interpolate)
 
     def collect_morph_triangles(self):
         contour_maker = self.contour_maker
@@ -57,7 +58,8 @@ class Delta4DContour(tetrahedral.Delta3DContour):
 
 class MorphingIsoSurfaces(Delta4DContour):
 
-    def __init__(self, mins, maxes, delta, function, value, segment_endpoints):
+    def __init__(self, mins, maxes, delta, function, value, segment_endpoints, linear_interpolate=True):
+        self.linear_interpolate = linear_interpolate
         self.grid = grid_field.FunctionGrid(mins, maxes, delta, function)
         return Delta4DContour.__init__(self, self.grid, value, segment_endpoints)
 

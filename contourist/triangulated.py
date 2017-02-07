@@ -30,11 +30,12 @@ class ContourGrid(object):
 
     "Shared functionality for 2d and 3d"
 
-    def __init__(self, function_grid, value, segment_endpoints=None):
+    def __init__(self, function_grid, value, segment_endpoints=None, linear_interpolate=True):
         """
         Derive piecewise approximate contours for function(x,y) = value
         starting at points (xmin + i*dx, ymin + j*dy) in range (xmin...xmax, ymin...ymax)
         """
+        self.linear_interpolate = linear_interpolate
         self.grid = function_grid
         self.value = value
         self.segment_endpoints = segment_endpoints
@@ -68,6 +69,7 @@ class ContourGrid(object):
 class DxDy2DContourGrid(ContourGrid):
 
     def get_contour_maker(self, grid_endpoints):
+        assert self.linear_interpolate, "non-linear interpolation not implemented yet for 2d"
         grid = self.grid
         (horizontal_n, vertical_m) = grid.grid_dimensions
         f = grid.grid_function
