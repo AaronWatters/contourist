@@ -31,3 +31,7 @@ as t0 smoothly transitions from a minimum to a maximum time value.
 
 Here is a live demo of a morphing isosurface displayed using jsfiddle:
 [https://jsfiddle.net/AaronWatters/x35crpb0/](https://jsfiddle.net/AaronWatters/x35crpb0/).
+
+Here is an example page that includes a morphing isosurface:
+[https://rawgit.com/AaronWatters/contourist/master/misc/distance.html](https://rawgit.com/AaronWatters/contourist/master/misc/distance.html).
+
