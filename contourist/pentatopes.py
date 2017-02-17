@@ -41,13 +41,23 @@ OFFSETS4D = np.array(
 
 class Delta4DContour(tetrahedral.Delta3DContour):
 
+    flatten=False
+    minimum_ratio=None
+    minimum_extent=None
+
     def get_contour_maker(self, grid_endpoints):
         grid = self.grid
         corner = grid.grid_dimensions
         f = grid.grid_function
         value = self.value
         interpolate = self.linear_interpolate
-        return GridContour4D(corner, f, value, grid_endpoints, linear_interpolate=interpolate)
+        result = GridContour4D(corner, f, value, grid_endpoints, linear_interpolate=interpolate)
+        result.flatten = self.flatten
+        if self.minimum_ratio is not None:
+            result.minimum_ratio = self.minimum_ratio
+        if self.minimum_extent is not None:
+            result.minimum_extent = self.minimum_extent
+        return result
 
     def collect_morph_triangles(self):
         contour_maker = self.contour_maker
@@ -58,7 +68,13 @@ class Delta4DContour(tetrahedral.Delta3DContour):
 
 class MorphingIsoSurfaces(Delta4DContour):
 
-    def __init__(self, mins, maxes, delta, function, value, segment_endpoints, linear_interpolate=True):
+    def __init__(self, mins, maxes, delta, function, value, segment_endpoints, 
+        linear_interpolate=True, flatten=False, minimum_ratio=None, minimum_extent=None):
+        self.flatten = flatten
+        if minimum_ratio is not None:
+            self.minimum_ratio = minimum_ratio
+        if minimum_extent is not None:
+            self.minimum_extent = minimum_extent
         self.linear_interpolate = linear_interpolate
         self.grid = grid_field.FunctionGrid(mins, maxes, delta, function)
         return Delta4DContour.__init__(self, self.grid, value, segment_endpoints)
@@ -74,6 +90,7 @@ class GridContour4D(tetrahedral.GridContour):
 
     box = HYPERCUBE
     offsets = OFFSETS4D
+    minimum_ratio = 0.05
 
     def sanity_check(self):
         assert self.dimension == 4, "dimension should be 4 " + repr(self.dimension)
@@ -87,6 +104,12 @@ class GridContour4D(tetrahedral.GridContour):
         self.bin_times()
         self.drop_instant_tetrahedra()
         self.remove_tiny_simplices(epsilon=1e-3)
+        if self.flatten:
+            minimum_extent = self.minimum_extent
+            if minimum_extent is None:
+                minimum_extent = self.corner.min() * 0.01
+            print "flattening"
+            self.collapse_flat_segments(minimum_extent, self.minimum_ratio)
 
     def bin_times(self, nbins=100):
         min_interval = self.corner[-1] * (1.0 / nbins)
