@@ -14,6 +14,7 @@ import numpy as np
 import grid_field
 import triangulated
 import surface_geometry
+import lp_tools
 
 # cube coordinates
 A = (0, 0, 0)
@@ -49,6 +50,9 @@ OFFSETS = np.array(
 class Delta3DContour(triangulated.ContourGrid):
 
     linear_interpolate = True   # default
+    flatten=False
+    minimum_ratio=None
+    minimum_extent=None
 
     def get_contour_maker(self, grid_endpoints):
         grid = self.grid
@@ -56,8 +60,14 @@ class Delta3DContour(triangulated.ContourGrid):
         self.grid_endpoints = grid_endpoints
         f = grid.grid_function
         value = self.value
-        return Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints,
+        result = Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints,
                 linear_interpolate=self.linear_interpolate)
+        result.flatten = self.flatten
+        if self.minimum_ratio is not None:
+            result.minimum_ratio = self.minimum_ratio
+        if self.minimum_extent is not None:
+            result.minimum_extent = self.minimum_extent
+        return result
 
     def search_for_endpoints(self, skip=1):
         # turn on grid caching
@@ -77,7 +87,12 @@ class Delta3DContour(triangulated.ContourGrid):
 class TriangulatedIsosurfaces(Delta3DContour):
 
     def __init__(self, mins, maxes, delta, function, value, segment_endpoints,
-            linear_interpolate=True):
+            linear_interpolate=True, flatten=False, minimum_ratio=None, minimum_extent=None):
+        self.flatten = flatten
+        if minimum_ratio is not None:
+            self.minimum_ratio = minimum_ratio
+        if minimum_extent is not None:
+            self.minimum_extent = minimum_extent
         grid = grid_field.FunctionGrid(mins, maxes, delta, function)
         return Delta3DContour.__init__(self, grid, value, segment_endpoints,
                 linear_interpolate=linear_interpolate)
@@ -93,6 +108,9 @@ class GridContour(object):
     # define at subclass
     box = None
     offsets = None
+    minimum_ratio = 0.05
+    minimum_extent = None
+    flatten = False
 
     def __init__(self, corner, function, value, segment_endpoints, 
         linear_interpolate=True, callback=None):
@@ -165,6 +183,139 @@ class GridContour(object):
         (oriented, interpolated) = self.contour_pair_interpolation(p0, p1, True)
         self.interpolated_contour_pairs[oriented] = interpolated
         return oriented
+
+    def quantize_interpolations(self, divisions=10000):
+        "combine interpolation points that are very close together."
+        expander = ((divisions * 1.0) / self.corner).astype(np.int)
+        interpolated = self.interpolated_contour_pairs
+        pairs = interpolated.keys()
+        interpolations = [interpolated[p] for p in pairs]
+        quantized = [tuple((interpolation * expander).astype(np.int)) for interpolation in interpolations]
+        # qmap unifies close interpolations
+        qmap = {q: (interpolations[i], pairs[i]) for (i, q) in enumerate(quantized)}
+        pair_map = {}
+        for (index, pair) in enumerate(pairs):
+            quant = quantized[index]
+            (interpolation, map_pair) = qmap[quant]
+            pair_map[pair] = map_pair
+        new_interpolated = {pair: interpolation for (interpolation, pair) in qmap.values()}
+        simplex_sets = self.simplex_sets
+        new_simplex_sets = set()
+        for simplex_set in simplex_sets:
+            #print list(pair_map[p] for p in simplex_set)
+            new_simplex_set = frozenset(pair_map[p] for p in simplex_set)
+            if len(new_simplex_set) == len(simplex_set):
+                new_simplex_sets.add(new_simplex_set)
+        print "quantized", len(interpolated) - len(new_interpolated), "interpolations"
+        print "quantized", len(simplex_sets) - len(new_simplex_sets), "simplices"
+        self.interpolated = new_interpolated
+        self.simplex_sets = new_simplex_sets
+
+    def collapse_flat_segments(self, minimum_extent, minimum_ratio, limit=None):
+        """
+        Collapse line segments in flat regions to single points.
+        Remove resulting trivial simplex sets.
+        """
+        simplex_sets = self.simplex_sets
+        interpolated = self.interpolated_contour_pairs
+        pairs = interpolated.keys()
+        pair_to_index = {pair: index for (index, pair) in enumerate(pairs)}
+        pair_adjacency = {pair: set() for pair in pairs}
+        segments = {}
+        dimension1 = self.dimension - 1
+        for simplex_set in simplex_sets:
+            for pair in simplex_set:
+                pair_adjacency[pair].update(simplex_set)
+                for pair2 in simplex_set:
+                    if pair2 < pair:
+                        #segments.add(frozenset([pair, pair2]))
+                        k = frozenset([pair, pair2])
+                        segments[k] = segments.get(k, 0) + 1
+        # identify the pairs that correspond to an edge vertex
+        edge_vertices = set()
+        for pair12 in segments:
+            if segments[pair12] < dimension1:
+                edge_vertices.update(pair12)
+        # collapse nearly flat segments to a single point
+        count = 0
+        collapsed = 0
+        unvisited_segments = set(segments.keys())
+        visited_segments = set()
+        print "flattening", len(unvisited_segments), "segments"
+        while unvisited_segments:
+            segment = (pair1, pair2) = unvisited_segments.pop()
+            visited_segments.add(segment)
+            # it's possible the points have been collapsed transitively...
+            pair1 = pairs[pair_to_index[pair1]]
+            pair2 = pairs[pair_to_index[pair2]]
+            if pair1 == pair2:
+                continue
+            if pair1 in edge_vertices:
+                if pair2 in edge_vertices:
+                    # don't flatten if both vertices are on an edges
+                    continue
+                else:
+                    # possibly remove pair2 -- swap
+                    (pair1, pair2) = (pair2, pair1)
+            count += 1
+            if count % 1000 == 0:
+                print "flattening at", count, collapsed, pair1, pair2
+            adjacent = (pair_adjacency[pair1] | pair_adjacency[pair2]) - set([pair1, pair2])
+            p1 = interpolated[pair1]
+            p2 = interpolated[pair2]
+            mapped_adjacent = [pairs[pair_to_index[pair]] for pair in adjacent]
+            points = [interpolated[pair] for pair in mapped_adjacent]
+            if lp_tools.nearly_flat(p1, p2, points, minimum_extent, minimum_ratio):
+                # collapse the segment pair1 --> pair2
+                collapsed += 1
+                #print "collapsing", pair1, "into", pair2
+                #print "at", interpolated[pair1], interpolated[pair2]
+                pair_to_index[pair1] = pair_to_index[pair2]
+                #del pair_to_index[pair1]
+                #interpolated[pair1] = interpolated[pair2]
+                del interpolated[pair1]
+                # update the edges and adjacencies, removing pair1
+                neighbors1 = [pairs[pair_to_index[pair]] for pair in pair_adjacency[pair1] if pair!=pair1]
+                neighbors2 = pair_adjacency[pair2]
+                neighbors2.update(neighbors1)
+                neighbors2.remove(pair1)
+                del pair_adjacency[pair1]
+                for neighbor in neighbors1:
+                    if neighbor == pair1 or neighbor == pair2:
+                        continue
+                    neighbors2.add(neighbor)
+                    old_segment = frozenset([pair1, neighbor])
+                    if old_segment in unvisited_segments:
+                        unvisited_segments.remove(old_segment)
+                        new_segment = frozenset([pair2, neighbor])
+                        if new_segment not in visited_segments:
+                            unvisited_segments.add(new_segment)
+                    adjacency = pair_adjacency[neighbor]
+                    adjacency.remove(pair1)
+                    adjacency.add(pair2)
+            #if collapsed> 3: break # DEBUG
+        # close index remapping
+        for pair in pair_to_index.keys():
+            map = pair
+            index = pair_to_index[map]
+            visited = []
+            while pairs[index] != map:
+                visited.append(map)
+                map = pairs[index]
+                index = pair_to_index[map]
+            for v in visited:
+                pair_to_index[v] = index
+        # remap the simplices using unified pairs, and omit trivialized simplices.
+        #print "pairs", list(enumerate(pairs))
+        #print "pair_to_index", pair_to_index
+        keep_simplex_sets = set()
+        for simplex_set in simplex_sets:
+            indices = set(pair_to_index[pair] for pair in simplex_set)
+            if len(indices) == len(simplex_set):
+                keep_simplex = frozenset(pairs[index] for index in indices)
+                keep_simplex_sets.add(keep_simplex)
+        print "flattened", len(simplex_sets) - len(keep_simplex_sets), "simplices leaving", len(keep_simplex_sets)
+        self.simplex_sets = keep_simplex_sets
 
     def remove_tiny_simplices(self, epsilon=1e-4):
         "collapse tiny simplices into a single interpolated point"
@@ -331,6 +482,11 @@ class GridContour3d(GridContour):
 
     box = CUBE
     offsets = OFFSETS
+    # change this to a list to archive the tetrahedra 
+    tetrahedra = None
+    minimum_ratio = 0.05
+    minimum_extent = None
+    flatten = False
 
     def sanity_check(self):
         assert self.dimension == 3
@@ -348,6 +504,12 @@ class GridContour3d(GridContour):
         for triple in self.surface_voxels:
             #print "enumerating", triple
             self.enumerate_voxel_triangles(triple)
+        #self.quantize_interpolations()
+        if self.flatten:
+            minimum_extent = self.minimum_extent
+            if minimum_extent is None:
+                minimum_extent = self.corner.min() * 0.01
+            self.collapse_flat_segments(minimum_extent, self.minimum_ratio)
         self.remove_tiny_simplices()
         return self.extract_points_and_triangles(clean)
 
@@ -381,10 +543,14 @@ class GridContour3d(GridContour):
         if len(leastpoints) > len(mostpoints):
             (leastpoints, mostpoints) = (mostpoints, leastpoints)
         if len(leastpoints) == 1:
+            if self.tetrahedra is not None:
+                self.tetrahedra.append(tetrahedron)
             [a] = leastpoints
             [b, c, d] = mostpoints
             self.add_simplex((a,b), (a,c), (a,d))
         else:
+            if self.tetrahedra is not None:
+                self.tetrahedra.append(tetrahedron)
             [a, b] = leastpoints
             [c, d] = mostpoints
             self.add_simplex((a,d), (a,c), (b,c))
