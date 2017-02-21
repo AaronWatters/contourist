@@ -25,6 +25,27 @@ class MorphTriangles(object):
         points4d = grid.from_grid_coordinates(self.points4d)
         return MorphTriangles(points4d, self.segment_point_indices, self.triangle_segment_indices)
 
+    def orient_triangles1(self, epsilon=10e-5):
+        #debug_die
+        segment_point_indices = self.segment_point_indices
+        triangles = list(self.triangle_segment_indices)
+        points4d = self.points4d
+        #segment_index_to_triangles = {}
+        oriented_triangle_indices = set()
+        for triangle in triangles:
+            triangle = list(triangle)
+            segments = np.array([segment_point_indices[i] for i in triangle])
+            start_points = np.array([points4d[s[0]] for s in segments])
+            end_points = np.array([points4d[s[1]] for s in segments])
+            (a, b, c) = 0.5 * (start_points[:,:3] + end_points[:,:3])
+            dotx = np.cross(a - b, a - c)[0]
+            if dotx > 0:
+                oriented = tuple(triangle)
+            else:
+                oriented = tuple(reversed(triangle))
+            oriented_triangle_indices.add(oriented)
+        self.triangle_segment_indices = oriented_triangle_indices
+
     def orient_triangles(self):
         "Orient triangles so right hand rule thumb points outward for all value of t."
         self.compute_triangle_stats()
@@ -132,6 +153,9 @@ class MorphGeometry(object):
             previous = current
 
     def add_tetrahedron(self, tetrahedron, mid_value=None):
+        if len(tetrahedron) < 4:
+            # XXXX sometimes len is 3 -- is this a bug???
+            return None
         (a, b, c, d) = sorted(tetrahedron)
         if mid_value is None:
             mid_value = self.mid_value
