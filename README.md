@@ -35,3 +35,5 @@ Here is a live demo of a morphing isosurface displayed using jsfiddle:
 Here is an example page that includes a morphing isosurface:
 [https://rawgit.com/AaronWatters/contourist/master/misc/distance.html](https://rawgit.com/AaronWatters/contourist/master/misc/distance.html).
 
+Here is another example derived from CT-scan data
+[https://rawgit.com/AaronWatters/contourist/master/misc/static_mri.html](https://rawgit.com/AaronWatters/contourist/master/misc/static_mri.html).
