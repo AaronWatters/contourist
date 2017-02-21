@@ -9,6 +9,7 @@ THREE.morph_triangles = function(morph_triangle_data, scene, duration, material,
     //var current_t = min_value + epsilon;
     var shift = morph_triangle_data["shift"];
     var scale = morph_triangle_data["scale"];
+    var ticking = false;
 
     var unflatten_list = function(sequence, split_length) {
         var result = []
@@ -257,6 +258,25 @@ THREE.morph_triangles = function(morph_triangle_data, scene, duration, material,
         if (after_tick) { after_tick(); }
     };
 
+    var autotick = function() {
+        if (ticking) {
+            requestAnimationFrame(autotick);
+            tick();
+        }
+    };
+
+    var set_ticking = function(onoff) {
+        if ((!ticking) && (onoff)) {
+            ticking = true;
+            autotick();
+        }
+        ticking = onoff;
+    };
+
+    var is_ticking = function() {
+        return ticking;
+    }
+
     var set_current_time = function(t) {
         // set the current time in input coordinates to t.
         current_t = t;
@@ -280,6 +300,8 @@ THREE.morph_triangles = function(morph_triangle_data, scene, duration, material,
 
     return {
         tick: tick,
+        set_ticking: set_ticking,
+        is_ticking: is_ticking,
         get_mesh: get_mesh,
         get_current_time: get_current_time,
         set_current_time: set_current_time,
