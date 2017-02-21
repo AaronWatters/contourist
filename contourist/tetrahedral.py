@@ -53,6 +53,7 @@ class Delta3DContour(triangulated.ContourGrid):
     flatten=False
     minimum_ratio=None
     minimum_extent=None
+    smooth = None
 
     def get_contour_maker(self, grid_endpoints):
         grid = self.grid
@@ -63,6 +64,7 @@ class Delta3DContour(triangulated.ContourGrid):
         result = Grid3DContour(horizontal_n, vertical_m, forward_l, f, value, grid_endpoints,
                 linear_interpolate=self.linear_interpolate)
         result.flatten = self.flatten
+        result.smooth = self.smooth
         if self.minimum_ratio is not None:
             result.minimum_ratio = self.minimum_ratio
         if self.minimum_extent is not None:
@@ -87,8 +89,9 @@ class Delta3DContour(triangulated.ContourGrid):
 class TriangulatedIsosurfaces(Delta3DContour):
 
     def __init__(self, mins, maxes, delta, function, value, segment_endpoints,
-            linear_interpolate=True, flatten=False, minimum_ratio=None, minimum_extent=None):
+            linear_interpolate=True, flatten=False, minimum_ratio=None, minimum_extent=None, smooth=None):
         self.flatten = flatten
+        self.smooth = smooth
         if minimum_ratio is not None:
             self.minimum_ratio = minimum_ratio
         if minimum_extent is not None:
@@ -259,7 +262,7 @@ class GridContour(object):
                     (pair1, pair2) = (pair2, pair1)
             count += 1
             if count % 1000 == 0:
-                print "flattening at", count, collapsed, pair1, pair2
+                print "flattening at", count, collapsed, len(unvisited_segments), len(visited_segments)
             adjacent = (pair_adjacency[pair1] | pair_adjacency[pair2]) - set([pair1, pair2])
             p1 = interpolated[pair1]
             p2 = interpolated[pair2]
@@ -316,6 +319,36 @@ class GridContour(object):
                 keep_simplex_sets.add(keep_simplex)
         print "flattened", len(simplex_sets) - len(keep_simplex_sets), "simplices leaving", len(keep_simplex_sets)
         self.simplex_sets = keep_simplex_sets
+        # keep only interpolations that are in use.
+        keep_interpolations = {}
+        for simplex in keep_simplex_sets:
+            for pair in simplex:
+                keep_interpolations[pair] = interpolated[pair]
+        self.interpolated_contour_pairs = keep_interpolations
+
+    def smooth_interpolations(self, factor):
+        simplex_sets = self.simplex_sets
+        interpolated = self.interpolated_contour_pairs
+        print "smoothing", len(interpolated)
+        #pairs = interpolated.keys()
+        #pair_to_index = {pair: index for (index, pair) in enumerate(pairs)}
+        pair_adjacency = {pair: set() for pair in interpolated}
+        #segments = {}
+        #dimension1 = self.dimension - 1
+        for simplex_set in simplex_sets:
+            for pair in simplex_set:
+                pair_adjacency[pair].update(simplex_set)
+        new_interpolated = {}
+        for pair in interpolated:
+            new_interpolated[pair] = interpolated[pair]
+            adjacentL = [interpolated[p] for p in pair_adjacency[pair]]
+            if adjacentL:
+                adjacent = np.array(adjacentL)
+                avg = adjacent.mean(axis=0)
+                int = interpolated[pair]
+                # move the interpolation towards the average.
+                new_interpolated[pair] = int - factor * (int - avg)
+        self.interpolated_contour_pairs = new_interpolated
 
     def remove_tiny_simplices(self, epsilon=1e-4):
         "collapse tiny simplices into a single interpolated point"
@@ -487,6 +520,7 @@ class GridContour3d(GridContour):
     minimum_ratio = 0.05
     minimum_extent = None
     flatten = False
+    smooth = None
 
     def sanity_check(self):
         assert self.dimension == 3
@@ -504,12 +538,16 @@ class GridContour3d(GridContour):
         for triple in self.surface_voxels:
             #print "enumerating", triple
             self.enumerate_voxel_triangles(triple)
-        #self.quantize_interpolations()
+        self.quantize_interpolations()
         if self.flatten:
             minimum_extent = self.minimum_extent
             if minimum_extent is None:
                 minimum_extent = self.corner.min() * 0.01
             self.collapse_flat_segments(minimum_extent, self.minimum_ratio)
+        if self.smooth:
+            assert self.smooth > 0 and self.smooth <= 1
+            #self.quantize_interpolations()
+            self.smooth_interpolations(self.smooth)
         self.remove_tiny_simplices()
         return self.extract_points_and_triangles(clean)
 

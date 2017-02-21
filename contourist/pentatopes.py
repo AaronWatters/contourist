@@ -44,6 +44,7 @@ class Delta4DContour(tetrahedral.Delta3DContour):
     flatten=False
     minimum_ratio=None
     minimum_extent=None
+    smooth = None
 
     def get_contour_maker(self, grid_endpoints):
         grid = self.grid
@@ -53,6 +54,7 @@ class Delta4DContour(tetrahedral.Delta3DContour):
         interpolate = self.linear_interpolate
         result = GridContour4D(corner, f, value, grid_endpoints, linear_interpolate=interpolate)
         result.flatten = self.flatten
+        result.smooth = self.smooth
         if self.minimum_ratio is not None:
             result.minimum_ratio = self.minimum_ratio
         if self.minimum_extent is not None:
@@ -69,8 +71,9 @@ class Delta4DContour(tetrahedral.Delta3DContour):
 class MorphingIsoSurfaces(Delta4DContour):
 
     def __init__(self, mins, maxes, delta, function, value, segment_endpoints, 
-        linear_interpolate=True, flatten=False, minimum_ratio=None, minimum_extent=None):
+        linear_interpolate=True, flatten=False, minimum_ratio=None, minimum_extent=None, smooth=None):
         self.flatten = flatten
+        self.smooth = smooth
         if minimum_ratio is not None:
             self.minimum_ratio = minimum_ratio
         if minimum_extent is not None:
@@ -101,17 +104,62 @@ class GridContour4D(tetrahedral.GridContour):
             self.expand_voxels()
         for quad in self.surface_voxels:
             self.enumerate_voxel_tetrahedra(quad)
-        self.bin_times()
-        self.drop_instant_tetrahedra()
-        self.remove_tiny_simplices(epsilon=1e-3)
+        #self.bin_times()
+        #self.bin_all()
+        #self.drop_instant_tetrahedra()
+        #self.remove_tiny_simplices(epsilon=1e-3)
+        #self.quantize_interpolations()
         if self.flatten:
             minimum_extent = self.minimum_extent
             if minimum_extent is None:
                 minimum_extent = self.corner.min() * 0.01
             print "flattening"
             self.collapse_flat_segments(minimum_extent, self.minimum_ratio)
+        if self.smooth:
+            assert self.smooth > 0 and self.smooth <= 1
+            #self.quantize_interpolations()
+            self.smooth_interpolations(self.smooth)
+        if not self.flatten:
+            #self.quantize_interpolations()
+            self.drop_instant_tetrahedra()
+            self.remove_tiny_simplices(epsilon=1e-3)
 
-    def bin_times(self, nbins=100):
+    def bin_all(self, nbins=(100,100,100,40)):
+        print "binning interpolations"
+        nbins = np.array(nbins)
+        min_intervals = self.corner * (1.0 / nbins)
+        interpolated = self.interpolated_contour_pairs
+        bins_to_interp = {}
+        pair_to_bin = {}
+        bin_to_pair = {}
+        for pair in interpolated:
+            interp = interpolated[pair]
+            bins = (interp / min_intervals).astype(np.int)
+            interp[:] = bins * min_intervals
+            tbins = tuple(bins)
+            pair_to_bin[pair] = tbins
+            bin_to_pair[tbins] = pair
+            bins_to_interp[tbins] = interp
+        pair_remap = {}
+        new_interpolated = {}
+        for pair in interpolated:
+            tbins = pair_to_bin[pair]
+            map_pair = bin_to_pair[tbins]
+            map_interp = bins_to_interp[tbins]
+            new_interpolated[map_pair] = map_interp
+            pair_remap[pair] = map_pair
+        print "binned interpolation", len(interpolated), "to", len(new_interpolated)
+        self.interpolated_contour_pairs = new_interpolated
+        simplex_sets = self.simplex_sets
+        keep_simplex_sets = set()
+        for simplex in simplex_sets:
+            new_simplex = frozenset(pair_remap[pair] for pair in simplex)
+            if len(new_simplex) == len(simplex):
+                keep_simplex_sets.add(new_simplex)
+        print "binned simplices", len(simplex_sets), "to", len(keep_simplex_sets)
+        self.simplex_sets = keep_simplex_sets
+
+    def bin_times(self, nbins=20):
         min_interval = self.corner[-1] * (1.0 / nbins)
         interpolated = self.interpolated_contour_pairs
         for pair in interpolated:

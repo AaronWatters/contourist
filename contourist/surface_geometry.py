@@ -122,6 +122,7 @@ class SurfaceGeometry(object):
                             orientation1 = triangle_orientations[triangle]
                             if not same_orientation(orientation1, orientation):
                                 #print "    bad orientation?", orientation1, orientation
+                                #raise ValueError("DEBUG: bad orientation " + repr((orientation1, orientation)))
                                 pass
                         else:
                             stack.append((triangle, orientation))
