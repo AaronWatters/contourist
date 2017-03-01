@@ -104,7 +104,7 @@ class GridContour4D(tetrahedral.GridContour):
             self.expand_voxels()
         for quad in self.surface_voxels:
             self.enumerate_voxel_tetrahedra(quad)
-        #self.bin_times()
+        self.bin_times()
         #self.bin_all()
         #self.drop_instant_tetrahedra()
         #self.remove_tiny_simplices(epsilon=1e-3)
@@ -159,7 +159,7 @@ class GridContour4D(tetrahedral.GridContour):
         print "binned simplices", len(simplex_sets), "to", len(keep_simplex_sets)
         self.simplex_sets = keep_simplex_sets
 
-    def bin_times(self, nbins=20):
+    def bin_times(self, nbins=100):
         min_interval = self.corner[-1] * (1.0 / nbins)
         interpolated = self.interpolated_contour_pairs
         for pair in interpolated:
