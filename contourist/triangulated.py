@@ -13,6 +13,56 @@ adjacent_offsets = [
 
 adjacency_array = np.array(adjacent_offsets, dtype=np.int)
 
+def contour_sequences_to_svg(contour_sequences, html_width=300):
+    "Example of how to convert contours to SVG.  Note intended for serious use."
+    mins = maxes = None
+    elements = []
+    element_points = []
+    for (closed, sequence) in contour_sequences:
+        pointstrings = []
+        first = True
+        for point in sequence:
+            pointstring = "%4.2f %4.2f" % tuple(point)
+            if first:
+                pointstrings.append("M" + pointstring)
+            else:
+                pointstrings.append("L" + pointstring)
+            point = np.array(point)
+            if mins is None:
+                mins = maxes = point
+            else:
+                mins = np.min([point, mins], axis=0)
+                maxes = np.max([point, maxes], axis=0)
+            first = False
+        if closed:
+            pointstrings.append("Z")
+        points = " ".join(pointstrings)
+        element_points.append(points)
+    stroke_width = 0.01 * np.max(maxes - mins)
+    stroke_width_str = "%4.2f" % stroke_width
+    for points in element_points:
+        element = '<path stroke-width="%s" stroke="black" fill="none" d="%s" />' % (stroke_width_str, points)
+        elements.append(element)
+    width, height = (maxes - mins)
+    scale = html_width * (1.0 / width)
+    html_height = height * scale
+    element_str = "\n".join(elements)
+    return SVG_TEMPLATE % (html_height, html_width, mins[0], mins[1], width, height, element_str)
+
+SVG_TEMPLATE = """
+<svg height="%s" width="%s" viewBox="%s %s %s %s">
+%s
+</svg>
+"""
+
+def svg_demo():
+    import math
+    def f(x, y):
+        return x*x + y*(y+1)*(y-1) - math.sin(2*y*y + 4*x)
+    C = DxDy2DContour(-1, -1, 1, 1, 0.2, 0.2, f, 0.2)
+    contours = C.get_contour_sequences()
+    return contour_sequences_to_svg(contours)
+
 def adjacent_pairs(low_pair, high_pair):
     low_pair = np.array(low_pair, dtype=np.int)
     high_pair = np.array(high_pair, dtype=np.int)
@@ -43,12 +93,14 @@ class ContourGrid(object):
         if segment_endpoints is not None:
             grid_endpoints = []
             for (start_xy, end_xy) in segment_endpoints:
+                assert len(start_xy) == len(end_xy) == 2
                 grid_endpoint = self.to_grid_endpoint(start_xy, end_xy)
                 if grid_endpoint is not None:
                     grid_endpoints.append(grid_endpoint)
             if len(grid_endpoints) < 1:
                 # default to grid search
                 grid_endpoints = None
+        #print "grid_endpoints", grid_endpoints
         self.contour_maker = self.get_contour_maker(grid_endpoints)
         #self.contour_maker = Grid2DContour(function_grid.horizontal_n, function_grid.vertical_m, 
         #    function_grid.grid_function, self.value, grid_endpoints)
@@ -325,3 +377,5 @@ class Grid2DContour(object):
                         result[(tuple(offset_location), tuple(location))] = interpolated
         return result
 
+if __name__ == "__main__":
+    print svg_demo()
