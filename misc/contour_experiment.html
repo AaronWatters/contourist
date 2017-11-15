@@ -56,14 +56,29 @@
 			THREE.DEBUG = true;
 
 			camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 10000 );
-			camera.position.z = 6;
-			camera.lookAt(new THREE.Vector3(1,1,0));
+			camera.position.z = 2;
+			camera.lookAt(new THREE.Vector3(0.5,0.5,0));
 
 			scene = new THREE.Scene();
 
 			var array = [];
+			var nrows = 200;
+			var ncols = 330;
+			var di = 1.0/nrows;
+			var dj = 1.0/ncols;
+			var s=13;
+			for (var i=0; i<nrows; i++) {
+				var row = [];
+				for (var j=0; j<ncols; j++) {
+					var x = i*di;
+					var y = j*dj;
+					var vector = [x, y, x*(y+1), Math.sin(x*y*s) * (1+Math.cos(x+y*s))];
+					row.push(vector);
+				}
+				array.push(row);
+			}
 			var value = 0.8;
-			var delta = 0.85;
+			var delta = 0.2;
 			info = THREE.contourist.Irregular2D(array, value, delta);
 			scene.add(info.object);
 

@@ -1,7 +1,6 @@
 
 // Some general structure inspired by
 // https://github.com/spite/THREE.MeshLine/blob/master/src/THREE.MeshLine.js
-debugger;
 
 ;(function() {
     
@@ -108,9 +107,25 @@ debugger;
     }
     `].join("\n");
 
-    // coordinates_and_values: rectangular grid of (x, y, z, f(x,y,z))
+    // coords: rectangular grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
-    var Irregular2D = function(coordinates_and_values, value, delta) {
+    var Irregular2D = function(coords, value, delta) {
+
+        var nrows = coords.length;
+        var ncols = coords[0].length;
+        // validate
+        for (var i=0; i<nrows; i++) {
+            var row = coords[i];
+            if (row.length != ncols) {
+                throw new Error("all rows must have the same length.");
+            }
+            for (var j=0; j<ncols; j++) {
+                var vector = row[j];
+                if (vector.length != 4) {
+                    throw new Error("all vector elements shoud have (x, y, z, f)");
+                }
+            }
+        }
 
         var uniforms = {
             color: { type: "c", value: new THREE.Color( 0xffffff ) },
@@ -145,6 +160,8 @@ debugger;
         var Bbuffer = [];
         var Cbuffer = [];
         var fbuffer = [];
+        // xxxx delete later....
+        /*
         for (var i = 0; i<6; i++) {
             indices.push(i % 2);
             Abuffer.push(0, 0, 0);
@@ -153,6 +170,31 @@ debugger;
             var f = [0, 0, 0];
             f[Math.floor(i/2) % 3] = 1;
             fbuffer.push(f[0], f[1], f[2]);
+        }
+        */
+        for (var i=0; i<nrows-1; i++) {
+            var rowi = coords[i];
+            var rowi1 = coords[i+1];
+            for (var j=0; j<ncols-1; j++) {
+                var ll = rowi[j];
+                var lr = rowi[j+1];
+                var ul = rowi1[j];
+                var ur = rowi1[j+1];
+                for (var ind=0; ind<2; ind++) {
+                    indices.push(ind);
+                    Abuffer.push(ll[0], ll[1], ll[2]);
+                    Bbuffer.push(lr[0], lr[1], lr[2]);
+                    Cbuffer.push(ur[0], ur[1], ur[2]);
+                    fbuffer.push(ll[3], lr[3], ur[3])
+                }
+                for (var ind=0; ind<2; ind++) {
+                    indices.push(ind);
+                    Abuffer.push(ll[0], ll[1], ll[2]);
+                    Bbuffer.push(ul[0], ul[1], ul[2]);
+                    Cbuffer.push(ur[0], ur[1], ur[2]);
+                    fbuffer.push(ll[3], ul[3], ur[3])
+                }
+            }
         }
         buffergeometry.addAttribute("point_index",
             (new THREE.BufferAttribute( new Float32Array(indices), 1)));
@@ -185,7 +227,7 @@ debugger;
     var contourist = {
         Irregular2D: Irregular2D
     };
-debugger;
+
     if( typeof exports !== 'undefined' ) {
         // Use exports if available
         if( typeof module !== 'undefined' && module.exports ) {
