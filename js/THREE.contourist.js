@@ -15,19 +15,7 @@
         throw new Error( 'THREE.contourist requires three.js' );
     }
 
-    var Irregular2D_Vertex_Shader = [`
-    uniform float f0;
-    uniform float delta;
-
-    attribute vec3 A;
-    attribute vec3 B;
-    attribute vec3 C;
-
-    attribute float point_index;
-
-    //varying vec3 vColor;
-    varying float visible;
-
+    var interpolate0code = `
     bool interpolate0(in vec3 P1, in float fP1, in vec3 P2, in float fP2, 
         in float f0, in float delta, out vec3 interpolated) {
         interpolated = vec3(0, 0, 0);  // degenerate default
@@ -57,42 +45,99 @@
         }
         return true;
     }
+    `
 
-    void main() {
+    var Irregular2D_Declarations = `
+    uniform float f0;
+    uniform float delta;
 
-        float fA0 = position[0];
-        float fB0 = position[1];
-        float fC0 = position[2];
+    attribute vec3 A;
+    attribute vec3 B;
+    attribute vec3 C;
 
-        vec3 p1;
-        vec3 p2;
-        bool p2set = false;
-        bool p1set = interpolate0(A, fA0, B, fB0, f0, delta, p1);
-        if (!p1set) {
-            p1set = interpolate0(A, fA0, C, fC0, f0, delta, p1);
-        } else {
-            p2set = interpolate0(A, fA0, C, fC0, f0, delta, p2);
-        }
-        if (!p2set) {
-            p2set = interpolate0(B, fB0, C, fC0, f0, delta, p2);
-        }
-        vec3 newPosition = vec3(0, 0, 0);  // degenerate default
+    attribute float point_index;
 
-        if (p1set && (point_index < 0.5)) {
-            newPosition = p1;
-            //vColor = vec3( 1.0, 0.5, 1.0);
-        } else if (p2set) {
-            newPosition = p2;
-            //vColor = vec3( 1.0, 1.0, 0.5);
-        }
-        gl_Position = projectionMatrix * modelViewMatrix * vec4( newPosition, 1.0 );
-        visible = 0.0;
-        if (p1set && p2set) {
-            visible = 2.0;
-        }
+    //varying vec3 vColor;
+    varying float visible;
+    `;
+
+    var Regular2D_Declarations = `
+    uniform float f0;
+    uniform float delta;
+    uniform vec3 u;
+    uniform vec3 v;
+    uniform vec3 origin;
+
+    attribute vec4 indices;
+
+    //varying vec3 vColor;
+    varying float visible;
+    `;
+
+    var Regular_Special = `
+    float i = indices[0];
+    float j = indices[1];
+    float point_index = indices[2];
+    float triangle_index = indices[3];
+    vec3 A = origin + i * u + j * v;
+    vec3 C = A + u + v;
+    vec3 B;
+    if (triangle_index < 0.5) {
+        vec3 B = A + u;
+    } else {
+        vec3 B = A + v;
     }
-    `].join("\n");
+    `;
 
+    var Irregular2D_Core = `
+    float fA0 = position[0];
+    float fB0 = position[1];
+    float fC0 = position[2];
+
+    vec3 p1;
+    vec3 p2;
+    bool p2set = false;
+    bool p1set = interpolate0(A, fA0, B, fB0, f0, delta, p1);
+    if (!p1set) {
+        p1set = interpolate0(A, fA0, C, fC0, f0, delta, p1);
+    } else {
+        p2set = interpolate0(A, fA0, C, fC0, f0, delta, p2);
+    }
+    if (!p2set) {
+        p2set = interpolate0(B, fB0, C, fC0, f0, delta, p2);
+    }
+    vec3 newPosition = vec3(0, 0, 0);  // degenerate default
+
+    if (p1set && (point_index < 0.5)) {
+        newPosition = p1;
+        //vColor = vec3( 1.0, 0.5, 1.0);
+    } else if (p2set) {
+        newPosition = p2;
+        //vColor = vec3( 1.0, 1.0, 0.5);
+    }
+    gl_Position = projectionMatrix * modelViewMatrix * vec4( newPosition, 1.0 );
+    visible = 0.0;
+    if (p1set && p2set) {
+        visible = 2.0;
+    }`
+
+    var Irregular2D_Vertex_Shader = [
+        Irregular2D_Declarations,
+        interpolate0code,
+        `void main() {`,
+        Irregular2D_Core,
+        `}`,
+        ].join("\n");
+
+    var Regular2D_Vertex_Shader = [
+        Regular2D_Declarations,
+        interpolate0code,
+        `void main() {`,
+        Regular_Special,
+        Irregular2D_Core,
+        `}`,
+        ].join("\n");
+            
     var Irregular2D_Fragment_Shader = [`
     uniform vec3 color;
     uniform float opacity;
