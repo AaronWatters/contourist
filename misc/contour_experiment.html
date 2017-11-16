@@ -32,8 +32,8 @@
 		<div id="container"></div>
 
 		// https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.js
-		// ../build/three.js
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.js"></script>
+		// ../js/three.js
+		<script src="../js/three.js"></script>
 
 		<script src="../js/THREE.contourist.js"></script>
 
@@ -56,29 +56,46 @@
 			THREE.DEBUG = true;
 
 			camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 10000 );
-			camera.position.z = 2;
-			camera.lookAt(new THREE.Vector3(0.5,0.5,0));
+			camera.position.z = 25;
+			//camera.lookAt(new THREE.Vector3(0.5,0.5,0));
 
 			scene = new THREE.Scene();
 
 			var array = [];
-			var nrows = 200;
-			var ncols = 330;
-			var di = 1.0/nrows;
-			var dj = 1.0/ncols;
+			var f = function(x, y, z) {
+				return Math.sin(x) + Math.sin(y) + Math.sin(z);
+			};
+			var nrows = 215;
+			var ncols = 216;
+			var di = 2.0 * Math.PI /nrows;
+			var dj = 2.0 * Math.PI /ncols;
 			var s=13;
+			var r1 = 3;
+			var r2 = 1;
 			for (var i=0; i<nrows; i++) {
+				var idi = i * di;
+				var ci = Math.sin(idi);
+				var si = Math.cos(idi);
 				var row = [];
 				for (var j=0; j<ncols; j++) {
-					var x = i*di;
-					var y = j*dj;
-					var vector = [x, y, x*(y+1), Math.sin(x*y*s) * (1+Math.cos(x+y*s))];
+					var jdj = j * dj;
+					var cj = Math.cos(jdj);
+					var sj = Math.sin(jdj)
+					var cx = ci;
+					var cy = si;
+					var cz = 0;
+					var z = cz + sj * r2;
+					var shift = r1 + cj * r2
+					var x = cx * shift;
+					var y = cy * shift;
+					var vector = [x, y, z, f(x, y, z)];
 					row.push(vector);
 				}
 				array.push(row);
 			}
+			debugger;
 			var value = 0.8;
-			var delta = 0.2;
+			var delta = 0.3;
 			info = THREE.contourist.Irregular2D(array, value, delta);
 			scene.add(info.object);
 
@@ -89,13 +106,6 @@
 
 			var container = document.getElementById( 'container' );
 			container.appendChild( renderer.domElement );
-
-			//stats = new Stats();
-			//stats.domElement.style.position = 'absolute';
-			//stats.domElement.style.top = '0px';
-			//container.appendChild( stats.domElement );
-
-			//
 
 			window.addEventListener( 'resize', onWindowResize, false );
 
@@ -123,7 +133,7 @@
 
 			var time = Date.now() * 0.001;
 
-			//object.rotation.y = 0.25 * time;
+			info.object.rotation.y = 0.25 * time;
 			info.uniforms.f0.value = Math.sin( 0.5 * time ) * 0.6 + 0.5;
 			//uniforms.opacity.value = Math.cos( 3 * time ) * 0.5 + 0.5;
 
