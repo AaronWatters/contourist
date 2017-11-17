@@ -2,6 +2,9 @@
 // Some general structure inspired by
 // https://github.com/spite/THREE.MeshLine/blob/master/src/THREE.MeshLine.js
 
+// Lighting logic from here:
+// https://csantosbh.wordpress.com/2014/01/09/custom-shaders-with-three-js-uniforms-textures-and-lighting/
+
 ;(function() {
     
     "use strict";
@@ -14,6 +17,46 @@
     if( !THREE ) {
         throw new Error( 'THREE.contourist requires three.js' );
     }
+
+    var shader_program_start = 'void main() {';
+
+    // added_global_declarations should include ""
+    // added_ihitial calculations should define vec3's override_vertex and override_normal
+    //   and also set visible to 1.0 or 0.0.
+    var patch_vertex_shader = function(
+        source_shader,
+        added_global_declarations,
+        added_initial_calculations
+    ) {
+        if (!source_shader.includes(shader_program_start)) {
+            throw new Error("Cannot find program start in source shader for patching.");
+        }
+        var initial_patch = [
+            added_global_declarations, 
+            "varying float visible;",
+            shader_program_start, 
+            added_initial_calculations
+        ].join("\n");
+        var patched_shader = source_shader.replace(shader_program_start, initial_patch);
+        var begin_vertex = THREE.ShaderChunk[ "begin_vertex" ];
+        if (!patched_shader.includes(begin_vertex)) {
+            throw new Error("Cannot find begin vertex in source shader for patching.");
+        }
+        var vertex_patch = [
+            begin_vertex,
+            "transformed = vec3(override_vertex); // contourist override"
+        ];
+        patched_shader = patched_shader.replace(begin_vertex, vertex_patch);
+        var beginnormal_vertex = THREE.ShaderChunk[ "beginnormal_vertex" ];
+        if (patched_shader.includes(beginnormal_vertex)) {
+            var normal_patch = [
+                beginnormal_vertex,
+                "objectNormal = vec3(override_normal); // contourist override"
+            ];
+            patched_shader = patched_shader.replace(beginnormal_vertex, normal_patch);
+        }
+        return patched_shader;
+    };
 
     var interpolate0code = `
     bool interpolate0(in vec3 P1, in float fP1, in vec3 P2, in float fP2, 
@@ -83,9 +126,9 @@
     vec3 C = A + u + v;
     vec3 B;
     if (triangle_index < 0.5) {
-        vec3 B = A + u;
+        B = A + v;
     } else {
-        vec3 B = A + v;
+        B = A + u;
     }
     `;
 
@@ -155,7 +198,7 @@
     // coords: rectangular grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
     var Irregular2D = function(coords, value, delta) {
-
+        
         var nrows = coords.length;
         var ncols = coords[0].length;
         // validate
@@ -205,18 +248,7 @@
         var Bbuffer = [];
         var Cbuffer = [];
         var fbuffer = [];
-        // xxxx delete later....
-        /*
-        for (var i = 0; i<6; i++) {
-            indices.push(i % 2);
-            Abuffer.push(0, 0, 0);
-            Bbuffer.push(1, 2, 0);
-            Cbuffer.push(2, 0, 0);
-            var f = [0, 0, 0];
-            f[Math.floor(i/2) % 3] = 1;
-            fbuffer.push(f[0], f[1], f[2]);
-        }
-        */
+
         for (var i=0; i<nrows-1; i++) {
             var rowi = coords[i];
             var rowi1 = coords[i+1];
@@ -260,17 +292,117 @@
             geometry: buffergeometry,
             material: shaderMaterial,
             uniforms: uniforms,
-            setOpacity: setValue,
-            setOpacity: setDelta,
+            setValue: setValue,
+            setDelta: setDelta,
             setOpacity: setOpacity
             
+        };
+        return result;
+    };
+
+    // coords: rectangular grid of f(x,y,z) field values
+    //   for point positions on regular grid.
+    var Regular2D = function(values, value, delta, origin, u, v) {
+
+        var nrows = values.length;
+        var ncols = values[0].length;
+        // validate
+        for (var i=0; i<nrows; i++) {
+            var row = values[i];
+            if (row.length != ncols) {
+                throw new Error("all rows must have the same length.");
+            }
+        }
+        var default_vector3 = function(x, a, b, c) {
+            if (x) {
+                if (!Array.isArray(x)) {
+                    return x;
+                }
+                a = x[0]; b = x[1]; c = x[2];
+            }
+            return new THREE.Vector3(a, b, c);
+        }
+        origin = default_vector3(origin, 0, 0, 0);
+        u = default_vector3(u, 1, 0, 0);
+        v = default_vector3(v, 0, 1, 0);
+
+        var uniforms = {
+            color: { type: "c", value: new THREE.Color( 0xffffff ) },
+            opacity:   { type: "f", value: 1.0 },
+            f0:   { type: "f", value: value },
+            delta:   { type: "f", value: delta },
+            u: { type: "v3", value: u },
+            v: { type: "v3", value: v },
+            origin: { type: "v3", value: origin },
+        };
+        debugger;
+
+        var setValue = function(value) {
+            uniforms.f0.value = value;
+        }
+        var setDelta = function(value) {
+            uniforms.delta.value = value;
+        }
+        var setOpacity = function(value) {
+            uniforms.opacity.value = value;
+        }
+
+        var shaderMaterial = new THREE.ShaderMaterial( {
+            uniforms:       uniforms,
+            vertexShader:   Regular2D_Vertex_Shader,
+            fragmentShader: Irregular2D_Fragment_Shader,
+            blending:       THREE.AdditiveBlending,
+            depthTest:      false,
+            transparent:    true
+        });
+
+        var buffergeometry = new THREE.BufferGeometry();
+
+        var indices = [];
+        var fbuffer = [];
+
+        for (var i=0; i<nrows-1; i++) {
+            var rowi = values[i];
+            var rowi1 = values[i+1];
+            for (var j=0; j<ncols-1; j++) {
+                var ll = rowi[j];
+                var lr = rowi[j+1];
+                var ul = rowi1[j];
+                var ur = rowi1[j+1];
+                var diags = [lr, ul];
+                for (var triangle=0; triangle<2; triangle++) {
+                    var diag = diags[triangle];
+                    for (var ind=0; ind<2; ind++) {
+                        indices.push(i, j, ind, triangle);
+                        fbuffer.push(ll, diag, ur);
+                    }
+                }
+            }
+        }
+        buffergeometry.addAttribute("indices",
+            (new THREE.BufferAttribute( new Float32Array(indices), 4)));
+        buffergeometry.addAttribute("position",
+            (new THREE.BufferAttribute( new Float32Array(fbuffer), 3)));
+
+        var object = new THREE.LineSegments( buffergeometry, shaderMaterial );
+
+        var result = {
+            // encapsulated interface
+            object: object,
+            geometry: buffergeometry,
+            material: shaderMaterial,
+            uniforms: uniforms,
+            setValue: setValue,
+            setDelta: setDelta,
+            setOpacity: setOpacity
         };
         return result;
     }
 
     // Exported functionality:
     var contourist = {
-        Irregular2D: Irregular2D
+        Irregular2D: Irregular2D,
+        Regular2D: Regular2D
     };
 
     if( typeof exports !== 'undefined' ) {
