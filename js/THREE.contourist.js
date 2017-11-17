@@ -18,9 +18,114 @@
         throw new Error( 'THREE.contourist requires three.js' );
     }
 
+    var Irregular3D_Declarations = `
+    uniform float f0;
+
+    attribute vec3 A;  Use position!
+    attribute vec3 B;
+    attribute vec3 C;
+    attribute vec3 D;
+    attribute vec4 fABCD;
+    //attribute float triangle; use position[0]
+    //attribute float point_index; use position[1]
+    `;
+
+    var Irregular3D_Core = `
+    visible = 0.0;  // default to invisible.
+    vec3 override_vertex = vec3(0, 0, 0);  // degenerate default.
+    vec3 override_normal = vec3(0, 0, 1);  // arbitrary default.
+    float triangle = position[0];  // 0 or 1
+    float point_index = position[1]; // 0, 1, or 2
+    // bubble sort ABCD on fABCD values
+    mat4 sorter;
+    sorter[0] = vec4(A, fABCD[0]);
+    sorter[1] = vec4(B, fABCD[1]);
+    sorter[2] = vec4(C, fABCD[2]);
+    sorter[3] = vec4(D, fABCD[3]);
+    vec4 save;
+    for (int iter=0; iter<3; iter++) {
+        for (int i=0; i<3; i++) {
+            if (sorter[i][3] > sorter[i+1][3]) {
+                save = vec4(sorter[i]);
+                sorter[i] = sorter[i+1];
+                sorter[i+1] = save;
+            }
+        }
+    }
+    // unpack sorted data
+    vec3 AA = vec3(sorter[0][0], sorter[0][1], sorter[0][2]);
+    float fA = sorter[0][3];
+    vec3 BB = vec3(sorter[1][0], sorter[1][1], sorter[1][2]);
+    float fB = sorter[1][3];
+    vec3 CC = vec3(sorter[2][0], sorter[2][1], sorter[2][2]);
+    float fC = sorter[2][3];
+    vec3 DD = vec3(sorter[3][0], sorter[3][1], sorter[3][2]);
+    float fD = sorter[3][3];
+    // find triangle vertices
+    vec3 positive_direction = DD - AA;
+    vec3 p1 = vec3(0, 0, 0);
+    vec3 p2 = vec3(0, 0, 0);
+    vec3 p3 = vec3(0, 0, 0);
+    bool valid_triangle = false;
+    if (fA < f0 && fD > f0) {
+        // one or two triangles inside tetrahedron (A,B,C,D)
+        if (FB < f0) {
+            if (FC < f0) {
+                // one triangle (DA, DB, DC)
+                if (triangle < 0.5) {
+                    valid_triangle = true;
+                    interpolate0(DD, fD, AA, fA, f0, 0.0, p1);
+                    interpolate0(DD, fD, BB, fB, f0, 0.0, p2);
+                    interpolate0(DD, fD, CC, fC, f0, 0.0, p3);
+                }
+            } else {
+                // two vertices on each side of level set:
+                // two triangles (AD, AC, BC), (AD, BD, BC)
+                if (triangle < 0.5) {
+                    valid_triangle = true;
+                    interpolate0(AA, fA, DD, fD, f0, 0.0, p1);
+                    interpolate0(AA, fA, CC, fC, f0, 0.0, p2);
+                    interpolate0(BB, fC, CC, fC, f0, 0.0, p3);
+                } else {
+                    valid_triangle = true;
+                    interpolate0(AA, fA, DD, fD, f0, 0.0, p1);
+                    interpolate0(BB, fB, DD, fD, f0, 0.0, p2);
+                    interpolate0(BB, fB, CC, fC, f0, 0.0, p3);
+                }
+            }
+        } else {
+            // one triangle (AB, AC, AD)
+            if (triangle < 0.5) {
+                valid_triangle = true;
+                interpolate0(AA, fA, BB, fB, f0, 0.0, p1);
+                interpolate0(AA, fA, CC, fC, f0, 0.0, p2);
+                interpolate0(AA, fA, DD, fD, f0, 0.0, p3);
+            }
+        }
+    }
+    if (valid_triangle) {
+        visible = 1.0;
+        if (point_index < 0.5) {
+            override_vertex = p1;
+        } else {
+            if (point_index > 1.5) {
+                override_vertex = p3;
+            } else {
+                override_vertex = p2;
+            }
+        }
+        // compute normal
+        vec3 test_normal = normalize(cross(p2-p1, p3-p1));
+        if (dot(test_normal, positive_direction) < 0.0) {
+            override_normal = - test_normal;
+        } else {
+            override_normal = test_normal;
+        }
+    }
+    `;
+
     var shader_program_start = 'void main() {';
 
-    // added_global_declarations should include ""
     // added_ihitial calculations should define vec3's override_vertex and override_normal
     //   and also set visible to 1.0 or 0.0.
     var patch_vertex_shader = function(
@@ -33,7 +138,8 @@
         }
         var initial_patch = [
             added_global_declarations, 
-            "varying float visible;",
+            "varying float visible;  // contourist visibility flag.",
+            interpolate0code,
             shader_program_start, 
             added_initial_calculations
         ].join("\n");
@@ -55,6 +161,25 @@
             ];
             patched_shader = patched_shader.replace(beginnormal_vertex, normal_patch);
         }
+        return patched_shader;
+    };
+
+    var visibility_patch = `
+    varying float visible;
+
+    void main() {
+        if (visible<1.0) {
+            discard;
+        }`;
+    var patch_fragment_shader = function(
+        source_shader,
+        added_global_declarations,
+        added_initial_calculations
+    ) {
+        if (!source_shader.includes(shader_program_start)) {
+            throw new Error("Cannot find program start in fragment shader for patching.");
+        }
+        var patched_shader = source_shader.replace(shader_program_start, visibility_patch);
         return patched_shader;
     };
 
