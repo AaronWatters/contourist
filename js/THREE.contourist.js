@@ -85,7 +85,7 @@
                     valid_triangle = true;
                     interpolate0(AA, fA, DD, fD, f0, 0.0, p1);
                     interpolate0(AA, fA, CC, fC, f0, 0.0, p2);
-                    interpolate0(BB, fC, CC, fC, f0, 0.0, p3);
+                    interpolate0(BB, fB, CC, fC, f0, 0.0, p3);
                 } else {
                     valid_triangle = true;
                     interpolate0(AA, fA, DD, fD, f0, 0.0, p1);
