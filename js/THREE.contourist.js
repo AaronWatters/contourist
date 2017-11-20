@@ -21,7 +21,7 @@
     var Irregular3D_Declarations = `
     uniform float f0;
 
-    attribute vec3 A;  Use position!
+    attribute vec3 A;
     attribute vec3 B;
     attribute vec3 C;
     attribute vec3 D;
@@ -29,11 +29,13 @@
     //attribute float triangle; use position[0]
     //attribute float point_index; use position[1]
     `;
+    //var Irregular3D_Declarations = ''; // XXXXXX
 
     var Irregular3D_Core = `
     visible = 0.0;  // default to invisible.
     vec3 override_vertex = vec3(0, 0, 0);  // degenerate default.
     vec3 override_normal = vec3(0, 0, 1);  // arbitrary default.
+    `; /*
     float triangle = position[0];  // 0 or 1
     float point_index = position[1]; // 0, 1, or 2
     // bubble sort ABCD on fABCD values
@@ -69,8 +71,8 @@
     bool valid_triangle = false;
     if (fA < f0 && fD > f0) {
         // one or two triangles inside tetrahedron (A,B,C,D)
-        if (FB < f0) {
-            if (FC < f0) {
+        if (fB < f0) {
+            if (fC < f0) {
                 // one triangle (DA, DB, DC)
                 if (triangle < 0.5) {
                     valid_triangle = true;
@@ -123,6 +125,9 @@
         }
     }
     `;
+    */
+
+    //Irregular3D_Core = '';  // XXXXX
 
     var shader_program_start = 'void main() {';
 
@@ -151,14 +156,14 @@
         var vertex_patch = [
             begin_vertex,
             "transformed = vec3(override_vertex); // contourist override"
-        ];
+        ].join("\n");
         patched_shader = patched_shader.replace(begin_vertex, vertex_patch);
         var beginnormal_vertex = THREE.ShaderChunk[ "beginnormal_vertex" ];
         if (patched_shader.includes(beginnormal_vertex)) {
             var normal_patch = [
                 beginnormal_vertex,
                 "objectNormal = vec3(override_normal); // contourist override"
-            ];
+            ].join("\n");
             patched_shader = patched_shader.replace(beginnormal_vertex, normal_patch);
         }
         return patched_shader;
@@ -171,11 +176,7 @@
         if (visible<1.0) {
             discard;
         }`;
-    var patch_fragment_shader = function(
-        source_shader,
-        added_global_declarations,
-        added_initial_calculations
-    ) {
+    var patch_fragment_shader = function(source_shader) {
         if (!source_shader.includes(shader_program_start)) {
             throw new Error("Cannot find program start in fragment shader for patching.");
         }
@@ -320,7 +321,7 @@
     }
     `].join("\n");
 
-    // coords: rectangular grid of (x, y, z, f(x,y,z))
+    // coords: rectangular 2d grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
     var Irregular2D = function(coords, value, delta) {
         
@@ -361,9 +362,9 @@
             uniforms:       uniforms,
             vertexShader:   Irregular2D_Vertex_Shader,
             fragmentShader: Irregular2D_Fragment_Shader,
-            blending:       THREE.AdditiveBlending,
-            depthTest:      false,
-            transparent:    true
+            //blending:       THREE.AdditiveBlending,
+            //depthTest:      false,
+            //transparent:    true
         });
 
         var buffergeometry = new THREE.BufferGeometry();
@@ -420,7 +421,131 @@
             setValue: setValue,
             setDelta: setDelta,
             setOpacity: setOpacity
-            
+        };
+        return result;
+    };
+    
+    // coords: rectangular 3d grid of (x, y, z, f(x,y,z))
+    //   for point positions and field values.
+    var Irregular3D = function(coords, value, shaderID) {
+        
+        var nrows = coords.length;
+        var ncols = coords[0].length;
+        var ndepth = coords[0][0].length;
+        // validate
+        for (var i=0; i<nrows; i++) {
+            var row = coords[i];
+            if (row.length != ncols) {
+                throw new Error("all rows must have the same length.");
+            }
+            for (var j=0; j<ncols; j++) {
+                var depth = row[j];
+                if (depth.length != ndepth) {
+                    throw new Error("all depth lengths should be the same");
+                }
+                for (var k=0; k<ndepth; k++) {
+                    var vector = depth[k];
+                    if (vector.length != 4) {
+                        throw new Error("all vector elements shoud have (x, y, z, f)");
+                    }
+                }
+            }
+        }
+
+        if (!shaderID) {
+            shaderID = "lambert";
+        }
+
+        var shaderInfo = THREE.ShaderLib[shaderID]
+
+        var uniforms = THREE.UniformsUtils.clone( shaderInfo.uniforms )
+        uniforms["f0"] = { type: "f", value: value };
+        var vertexShader = shaderInfo.vertexShader;
+        vertexShader = patch_vertex_shader(vertexShader, Irregular3D_Declarations, Irregular3D_Core);
+        var fragmentShader = shaderInfo.fragmentShader;
+        fragmentShader = patch_fragment_shader(fragmentShader);
+
+        var setValue = function(value) {
+            uniforms.f0.value = value;
+        };
+
+        var shaderMaterial = new THREE.ShaderMaterial( {
+            uniforms:       uniforms,
+            vertexShader:   vertexShader,
+            fragmentShader: fragmentShader,
+            blending:       THREE.AdditiveBlending,
+            depthTest:      false,
+            lights:         true,
+            side: THREE.DoubleSide
+        });
+
+        var buffergeometry = new THREE.BufferGeometry();
+
+        var indices = [];
+        var Abuffer = [];
+        var Bbuffer = [];
+        var Cbuffer = [];
+        var Dbuffer = [];
+        var fbuffer = [];
+        
+        // debugging...
+        for (var triangle=0; triangle<2; triangle++) {
+            for (var point_index=0; point_index<3; point_index++) {
+                indices.push(triangle, point_index, 0);
+                Abuffer.push(0, 0, 0);
+                Bbuffer.push(0, 1, 0);
+                Cbuffer.push(1, 0, 0);
+                Dbuffer.push(0, 0, 1);
+                fbuffer.push(0, 1, 1, 1);
+            }
+        }
+/*
+        for (var i=0; i<nrows-1; i++) {
+            var rowi = coords[i];
+            var rowi1 = coords[i+1];
+            for (var j=0; j<ncols-1; j++) {
+                var ll = rowi[j];
+                var lr = rowi[j+1];
+                var ul = rowi1[j];
+                var ur = rowi1[j+1];
+                for (var ind=0; ind<2; ind++) {
+                    indices.push(ind);
+                    Abuffer.push(ll[0], ll[1], ll[2]);
+                    Bbuffer.push(lr[0], lr[1], lr[2]);
+                    Cbuffer.push(ur[0], ur[1], ur[2]);
+                    fbuffer.push(ll[3], lr[3], ur[3])
+                }
+                for (var ind=0; ind<2; ind++) {
+                    indices.push(ind);
+                    Abuffer.push(ll[0], ll[1], ll[2]);
+                    Bbuffer.push(ul[0], ul[1], ul[2]);
+                    Cbuffer.push(ur[0], ur[1], ur[2]);
+                    fbuffer.push(ll[3], ul[3], ur[3])
+                }
+            }
+        } */
+        buffergeometry.addAttribute("A",
+            (new THREE.BufferAttribute( new Float32Array(Abuffer), 3)));
+        buffergeometry.addAttribute("B",
+            (new THREE.BufferAttribute( new Float32Array(Bbuffer), 3)));
+        buffergeometry.addAttribute("C",
+            (new THREE.BufferAttribute( new Float32Array(Cbuffer), 3)));
+        buffergeometry.addAttribute("D",
+            (new THREE.BufferAttribute( new Float32Array(Dbuffer), 3)));
+        buffergeometry.addAttribute("fABCD",
+            (new THREE.BufferAttribute( new Float32Array(fbuffer), 4)));
+        buffergeometry.addAttribute("position",
+            (new THREE.BufferAttribute( new Float32Array(indices), 3)));
+
+        var object = new THREE.Mesh( buffergeometry, shaderMaterial );
+
+        var result = {
+            // encapsulated interface
+            object: object,
+            geometry: buffergeometry,
+            material: shaderMaterial,
+            uniforms: uniforms,
+            setValue: setValue
         };
         return result;
     };
@@ -476,9 +601,9 @@
             uniforms:       uniforms,
             vertexShader:   Regular2D_Vertex_Shader,
             fragmentShader: Irregular2D_Fragment_Shader,
-            blending:       THREE.AdditiveBlending,
-            depthTest:      false,
-            transparent:    true
+            //blending:       THREE.AdditiveBlending,
+            //depthTest:      false,
+            //transparent:    true
         });
 
         var buffergeometry = new THREE.BufferGeometry();
@@ -526,6 +651,7 @@
 
     // Exported functionality:
     var contourist = {
+        Irregular3D: Irregular3D,
         Irregular2D: Irregular2D,
         Regular2D: Regular2D
     };
