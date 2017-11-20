@@ -17,6 +17,14 @@
     if( !THREE ) {
         throw new Error( 'THREE.contourist requires three.js' );
     }
+    
+    var extremum = function(numArray, mnmx) {
+        var result = numArray[0];  // apply blows out the stack.
+        for (var i=1; i<numArray.length; i++) {
+            result = mnmx(result, numArray[i]);
+        }
+        return result;
+    };
 
     var Irregular3D_Declarations = `
     uniform float f0;
@@ -223,6 +231,7 @@
     attribute vec3 A;
     attribute vec3 B;
     attribute vec3 C;
+    attribute vec3 f;
 
     attribute float point_index;
 
@@ -237,31 +246,41 @@
     uniform vec3 v;
     uniform vec3 origin;
 
-    attribute vec4 indices;
+    attribute vec2 indices;
+    // attribute vec3 position
+    attribute vec2 ij;
+    attribute vec4 fbuffer;
 
     //varying vec3 vColor;
     varying float visible;
     `;
 
     var Regular_Special = `
-    float i = indices[0];
-    float j = indices[1];
-    float point_index = indices[2];
-    float triangle_index = indices[3];
+    float i = ij[0];
+    float j = ij[1];
+    float point_index = indices[0];
+    float triangle_index = indices[1];
     vec3 A = origin + i * u + j * v;
     vec3 C = A + u + v;
     vec3 B;
+    float ll = fbuffer[0];
+    float lr = fbuffer[1];
+    float ul = fbuffer[2];
+    float ur = fbuffer[3];
+    vec3 f;
     if (triangle_index < 0.5) {
         B = A + v;
+        f = vec3(ll, lr, ur);
     } else {
         B = A + u;
+        f = vec3(ll, ul, ur);
     }
     `;
 
     var Irregular2D_Core = `
-    float fA0 = position[0];
-    float fB0 = position[1];
-    float fC0 = position[2];
+    float fA0 = f[0];
+    float fB0 = f[1];
+    float fC0 = f[2];
 
     vec3 p1;
     vec3 p2;
@@ -275,7 +294,7 @@
     if (!p2set) {
         p2set = interpolate0(B, fB0, C, fC0, f0, delta, p2);
     }
-    vec3 newPosition = vec3(0, 0, 0);  // degenerate default
+    vec3 newPosition = position;  // degenerate default
 
     if (p1set && (point_index < 0.5)) {
         newPosition = p1;
@@ -364,17 +383,18 @@
             fragmentShader: Irregular2D_Fragment_Shader,
             //blending:       THREE.AdditiveBlending,
             //depthTest:      false,
-            //transparent:    true
+            transparent:    true
         });
 
-        var buffergeometry = new THREE.BufferGeometry();
+        var buffergeometry = new THREE.InstancedBufferGeometry();
 
-        var indices = [];
+        var indices = [0, 1];
         var Abuffer = [];
         var Bbuffer = [];
         var Cbuffer = [];
         var fbuffer = [];
 
+        // per instance
         for (var i=0; i<nrows-1; i++) {
             var rowi = coords[i];
             var rowi1 = coords[i+1];
@@ -383,32 +403,63 @@
                 var lr = rowi[j+1];
                 var ul = rowi1[j];
                 var ur = rowi1[j+1];
-                for (var ind=0; ind<2; ind++) {
-                    indices.push(ind);
+                //for (var ind=0; ind<2; ind++) {
+                    //indices.push(ind);
                     Abuffer.push(ll[0], ll[1], ll[2]);
                     Bbuffer.push(lr[0], lr[1], lr[2]);
                     Cbuffer.push(ur[0], ur[1], ur[2]);
                     fbuffer.push(ll[3], lr[3], ur[3])
-                }
-                for (var ind=0; ind<2; ind++) {
-                    indices.push(ind);
+                //}
+                //for (var ind=0; ind<2; ind++) {
+                    //indices.push(ind);
                     Abuffer.push(ll[0], ll[1], ll[2]);
                     Bbuffer.push(ul[0], ul[1], ul[2]);
                     Cbuffer.push(ur[0], ur[1], ur[2]);
                     fbuffer.push(ll[3], ul[3], ur[3])
-                }
+                //}
             }
         }
-        buffergeometry.addAttribute("point_index",
-            (new THREE.BufferAttribute( new Float32Array(indices), 1)));
+
+        var mn = extremum(Abuffer, Math.min);
+        var mx = extremum(Bbuffer, Math.max);
+        var positions = [mn, mn, mn, mx, mx, mx];
+        // XXXX DEBUG
+        /*
+        indices = [0,1];
+        Abuffer = [1,0,0];
+        Bbuffer = [0,1,0];
+        Cbuffer = [1,1,0];
+        fbuffer = [0,1,1];
+        */
+        //geometry.maxInstancedCount = (nrows - 1) * (ncols - 1);
+        //buffergeometry.addAttribute("point_index",
+        //    (new THREE.BufferAttribute( new Float32Array(indices), 1)));
+        // per mesh
+        //var indexb = new THREE.InterleavedBuffer( new Float32Array( indices ), 2);  // two items each mesh
+        //var point_index = new THREE.InterleavedBufferAttribute( indexb, 1, 0);  // one each per vertex starting at offset 0
+        //var point_index = new THREE.BufferAttribute( new Float32Array(indices), 1 )
+        var point_index = new THREE.Float32BufferAttribute( indices, 1 );
+        buffergeometry.addAttribute("point_index", point_index);
+        var position_buffer = new THREE.Float32BufferAttribute( positions, 3 );
+        buffergeometry.addAttribute("position", position_buffer);
+
+        // per instance
         buffergeometry.addAttribute("A",
-            (new THREE.BufferAttribute( new Float32Array(Abuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Abuffer), 3)));
+        //var Ab = new THREE.InstancedInterleavedBuffer(Abuffer, 3, 1 ).setDynamic( true );
+        //buffergeometry.addAttribute("A", Ab);
+        //var Bb = new THREE.InstancedInterleavedBuffer(Bbuffer, 3, 1 ).setDynamic( true );
+        //buffergeometry.addAttribute("B", Bb);
+        //var Cb = new THREE.InstancedInterleavedBuffer(Cbuffer, 3, 1 ).setDynamic( true );
+        //buffergeometry.addAttribute("C", Cb);
+        //var positionb = new THREE.InstancedInterleavedBuffer(fbuffer, 3, 1 ).setDynamic( true );
+        //buffergeometry.addAttribute("position", positionb);
         buffergeometry.addAttribute("B",
-            (new THREE.BufferAttribute( new Float32Array(Bbuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Bbuffer), 3)));
         buffergeometry.addAttribute("C",
-            (new THREE.BufferAttribute( new Float32Array(Cbuffer), 3)));
-        buffergeometry.addAttribute("position",
-            (new THREE.BufferAttribute( new Float32Array(fbuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Cbuffer), 3)));
+        buffergeometry.addAttribute("f",
+            (new THREE.InstancedBufferAttribute( new Float32Array(fbuffer), 3)));
 
         var object = new THREE.LineSegments( buffergeometry, shaderMaterial );
 
@@ -606,11 +657,53 @@
             //transparent:    true
         });
 
-        var buffergeometry = new THREE.BufferGeometry();
-
+        var buffergeometry = new THREE.InstancedBufferGeometry();
+        
+        // per mesh
         var indices = [];
-        var fbuffer = [];
+        var positions = [];
 
+        // per instance
+        var fbuffer = [];
+        var ij = []
+
+        for (var i=0; i<nrows-1; i++) {
+            var rowi = values[i];
+            var rowi1 = values[i+1];
+            for (var j=0; j<ncols-1; j++) {
+                var ll = rowi[j];
+                var lr = rowi[j+1];
+                var ul = rowi1[j];
+                var ur = rowi1[j+1];
+                fbuffer.push(ll, lr, ul, ur);
+                ij.push(i, j);
+            }
+        }
+        var e0 = origin[0] + u[0] + v[0]
+        var e1 = origin[1] + u[1] + v[1]
+        var e2 = origin[2] + u[2] + v[2]
+        for (var triangle=0; triangle<2; triangle++) {
+            for (var ind=0; ind<2; ind++) {
+                indices.push(ind, triangle);
+                positions.push(e0, e1, e2); // dummy value
+            }
+        }
+        positions[0] = origin[0];
+        positions[1] = origin[1];
+        positions[2] = origin[2];
+
+        // add per mesh attributes
+        var indices_b = new THREE.Float32BufferAttribute( indices, 2 );
+        buffergeometry.addAttribute("indices", indices_b);
+        var position_b = new THREE.Float32BufferAttribute( positions, 3 );
+        buffergeometry.addAttribute("position", position_b);
+        // add per instance attribute
+        var ij_b = new THREE.InstancedBufferAttribute(new Float32Array(ij), 2 );
+        buffergeometry.addAttribute("ij", ij_b);
+        var fbuffer_b = new THREE.InstancedBufferAttribute(new Float32Array(fbuffer), 4 );
+        buffergeometry.addAttribute("fbuffer", fbuffer_b);
+
+        /*
         for (var i=0; i<nrows-1; i++) {
             var rowi = values[i];
             var rowi1 = values[i+1];
@@ -633,7 +726,7 @@
             (new THREE.BufferAttribute( new Float32Array(indices), 4)));
         buffergeometry.addAttribute("position",
             (new THREE.BufferAttribute( new Float32Array(fbuffer), 3)));
-
+        */
         var object = new THREE.LineSegments( buffergeometry, shaderMaterial );
 
         var result = {
