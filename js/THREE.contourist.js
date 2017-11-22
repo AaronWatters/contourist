@@ -103,12 +103,12 @@
         if (fB < f0) {
             if (fC < f0) {
                 // one triangle (DA, DB, DC)
-                //if (triangle < 0.5) {
+                if (triangle < 0.5) {
                     valid_triangle = true;
                     interpolate0(DD, fD, AA, fA, f0, 0.0, p2);
                     interpolate0(DD, fD, BB, fB, f0, 0.0, p1);
                     interpolate0(DD, fD, CC, fC, f0, 0.0, p3);
-                //}
+                }
             } else {
                 // two vertices on each side of level set:
                 // two triangles (AD, AC, BC), (AD, BD, BC)
@@ -127,12 +127,12 @@
             }
         } else {
             // one triangle (AB, AC, AD)
-            //if (triangle < 0.5) {
+            if (triangle < 0.5) {
                 valid_triangle = true;
                 interpolate0(AA, fA, BB, fB, f0, 0.0, p1);
                 interpolate0(AA, fA, CC, fC, f0, 0.0, p2);
                 interpolate0(AA, fA, DD, fD, f0, 0.0, p3);
-            //}
+            }
         }
     }
     // XXX debugging
