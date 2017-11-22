@@ -45,6 +45,7 @@
 
 		var object, uniforms;
 		var info;
+		var minf, maxf
 
 		init();
 		animate();
@@ -56,7 +57,7 @@
 			THREE.DEBUG = true;
 
 			camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 10000 );
-			camera.position.z = 12;
+			camera.position.z = 22;
 			//camera.lookAt(new THREE.Vector3(3,3,3));
 
 			scene = new THREE.Scene();
@@ -67,8 +68,10 @@
 				var a = Math.sin(x + Math.sin(y)) + Math.sin(y + Math.sin(z)) + Math.sin(z/(x+9));
 				return (a + 3)/6.0;
 			};
+			minf = f(0,0,0);
+			maxf = minf;
 			var nrows = 45;
-			var ncols = 46;
+			var ncols = 66;
 			var ndepth = 44;
 			var di = 2.0 * Math.PI /nrows;
 			var dj = 2.0 * Math.PI /ncols;
@@ -78,9 +81,12 @@
 				var row = [];
 				for (var j=0; j<ncols; j++) {
 					var jdj = j * dj;
-					depth = [];
+					var depth = [];
 					for (var k=0; k<ndepth; k++) {
-						kdk = k * dk;
+						var kdk = k * dk;
+						var fijk = f(idi, jdj, kdk);
+						minf = Math.min(minf, fijk);
+						maxf = Math.max(maxf, fijk);
 						vector = [idi-Math.PI, jdj-Math.PI, kdk-Math.PI, f(idi, jdj, kdk)]
 						depth.push(vector);
 					}
@@ -151,8 +157,8 @@
 			info.object.rotation.y = 0.25 * time;
 			// first time uniforms will not be initialized.
 			if (info.uniforms) {
-				info.uniforms.f0.value = Math.sin( 0.1 * time ) * 0.5 + 0.5;
-				info.uniforms.opacity.value = Math.cos( 3 * time ) * 0.5 + 0.5;
+				info.uniforms.f0.value = minf + (Math.sin( 0.1 * time ) * 0.5 + 0.5) * (maxf - minf);
+				//info.uniforms.opacity.value = Math.cos( 3 * time ) * 0.5 + 0.5;
 			}
 			renderer.render( scene, camera );
 
