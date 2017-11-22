@@ -34,18 +34,38 @@
     attribute vec3 C;
     attribute vec3 D;
     attribute vec4 fABCD;
-    //attribute float triangle; use position[0]
-    //attribute float point_index; use position[1]
+    attribute float triangle;
+    attribute float point_index;
     `;
     //var Irregular3D_Declarations = ''; // XXXXXX
 
     var Irregular3D_Core = `
     visible = 0.0;  // default to invisible.
     vec3 override_vertex = vec3(0, 0, 0);  // degenerate default.
-    vec3 override_normal = vec3(0, 0, 1);  // arbitrary default.
-    `; /*
-    float triangle = position[0];  // 0 or 1
-    float point_index = position[1]; // 0, 1, or 2
+    vec3 override_normal = vec3(0, 1, 0);  // arbitrary default.
+    // FOR DEBUG ONLY!
+    /*
+    if (point_index < 0.5) {
+        override_vertex = A;
+    } else {
+        if (point_index < 1.5) {
+            override_vertex = B;
+        } else {
+            if (triangle < 0.5) {
+                override_vertex = C;
+            } else {
+                override_vertex = D;
+            }
+        }
+    }
+    if (triangle > 0.5) {
+        override_normal = vec3(1, 0, 0);
+    } */
+    //visible = 100000.0;
+    // END OF DEBUG
+    
+    //float triangle = position[0];  // 0 or 1
+    //float point_index = position[1]; // 0, 1, or 2
     // bubble sort ABCD on fABCD values
     mat4 sorter;
     sorter[0] = vec4(A, fABCD[0]);
@@ -77,20 +97,22 @@
     vec3 p2 = vec3(0, 0, 0);
     vec3 p3 = vec3(0, 0, 0);
     bool valid_triangle = false;
+    bool two_triangles = false;
     if (fA < f0 && fD > f0) {
         // one or two triangles inside tetrahedron (A,B,C,D)
         if (fB < f0) {
             if (fC < f0) {
                 // one triangle (DA, DB, DC)
-                if (triangle < 0.5) {
+                //if (triangle < 0.5) {
                     valid_triangle = true;
-                    interpolate0(DD, fD, AA, fA, f0, 0.0, p1);
-                    interpolate0(DD, fD, BB, fB, f0, 0.0, p2);
+                    interpolate0(DD, fD, AA, fA, f0, 0.0, p2);
+                    interpolate0(DD, fD, BB, fB, f0, 0.0, p1);
                     interpolate0(DD, fD, CC, fC, f0, 0.0, p3);
-                }
+                //}
             } else {
                 // two vertices on each side of level set:
                 // two triangles (AD, AC, BC), (AD, BD, BC)
+                two_triangles = true;
                 if (triangle < 0.5) {
                     valid_triangle = true;
                     interpolate0(AA, fA, DD, fD, f0, 0.0, p1);
@@ -105,16 +127,23 @@
             }
         } else {
             // one triangle (AB, AC, AD)
-            if (triangle < 0.5) {
+            //if (triangle < 0.5) {
                 valid_triangle = true;
                 interpolate0(AA, fA, BB, fB, f0, 0.0, p1);
                 interpolate0(AA, fA, CC, fC, f0, 0.0, p2);
                 interpolate0(AA, fA, DD, fD, f0, 0.0, p3);
-            }
+            //}
         }
     }
+    // XXX debugging
+    //if (triangle < 0.5) {
+    //    valid_triangle = false;
+    //}
     if (valid_triangle) {
-        visible = 1.0;
+        visible = 1.0; // ???? XXXX
+        if (two_triangles || (triangle < 0.5)) {
+            visible = 1.0;
+        }
         if (point_index < 0.5) {
             override_vertex = p1;
         } else {
@@ -131,9 +160,12 @@
         } else {
             override_normal = test_normal;
         }
+        //override_normal = vec3(1, 0, 0); // XXXX DEBUG
+        //if (triangle < 0.5) {
+        //    override_normal = - override_normal;
+        //}
     }
     `;
-    */
 
     //Irregular3D_Core = '';  // XXXXX
 
@@ -157,7 +189,7 @@
             added_initial_calculations
         ].join("\n");
         var patched_shader = source_shader.replace(shader_program_start, initial_patch);
-        var begin_vertex = THREE.ShaderChunk[ "begin_vertex" ];
+        var begin_vertex = '#include <begin_vertex>';
         if (!patched_shader.includes(begin_vertex)) {
             throw new Error("Cannot find begin vertex in source shader for patching.");
         }
@@ -166,7 +198,7 @@
             "transformed = vec3(override_vertex); // contourist override"
         ].join("\n");
         patched_shader = patched_shader.replace(begin_vertex, vertex_patch);
-        var beginnormal_vertex = THREE.ShaderChunk[ "beginnormal_vertex" ];
+        var beginnormal_vertex = '#include <beginnormal_vertex>';
         if (patched_shader.includes(beginnormal_vertex)) {
             var normal_patch = [
                 beginnormal_vertex,
@@ -189,6 +221,10 @@
             throw new Error("Cannot find program start in fragment shader for patching.");
         }
         var patched_shader = source_shader.replace(shader_program_start, visibility_patch);
+        // force front facing to always be true
+        var normal_fragment = THREE.ShaderChunk["normal_fragment"];
+        normal_fragment = normal_fragment.replace("gl_FrontFacing", "true");
+        patched_shader = patched_shader.replace("#include <normal_fragment>", normal_fragment);
         return patched_shader;
     };
 
@@ -478,7 +514,12 @@
     
     // coords: rectangular 3d grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
-    var Irregular3D = function(coords, value, shaderID) {
+    var Irregular3D = function(coords, value, material) {
+
+        if (!material) {
+            material = new THREE.MeshNormalMaterial();
+        }
+        material.side = THREE.DoubleSide;
         
         var nrows = coords.length;
         var ncols = coords[0].length;
@@ -503,78 +544,97 @@
             }
         }
 
-        if (!shaderID) {
-            shaderID = "lambert";
+        var materialShader;
+        var uniforms;
+        var vertexShader;
+        var fragmentShader;
+        var result = {};
+
+        material.onBeforeCompile = function ( shader ) {            
+            uniforms = shader.uniforms;
+            uniforms["f0"] = { type: "f", value: value };
+            vertexShader = shader.vertexShader;
+            vertexShader = patch_vertex_shader(vertexShader, Irregular3D_Declarations, Irregular3D_Core);
+            fragmentShader = shader.fragmentShader;
+            fragmentShader = patch_fragment_shader(fragmentShader);
+            shader.vertexShader = vertexShader;
+            shader.fragmentShader = fragmentShader;
+            materialShader = shader;
+            result.shader = shader;
+            result.vertexShader = vertexShader;
+            result.fragmentShader = fragmentShader;
+            result.uniforms = uniforms;
         }
 
-        var shaderInfo = THREE.ShaderLib[shaderID]
-
-        var uniforms = THREE.UniformsUtils.clone( shaderInfo.uniforms )
-        uniforms["f0"] = { type: "f", value: value };
-        var vertexShader = shaderInfo.vertexShader;
-        vertexShader = patch_vertex_shader(vertexShader, Irregular3D_Declarations, Irregular3D_Core);
-        var fragmentShader = shaderInfo.fragmentShader;
-        fragmentShader = patch_fragment_shader(fragmentShader);
-
         var setValue = function(value) {
-            uniforms.f0.value = value;
+            // silently fail if shader is not initialized
+            if (uniforms) {
+                uniforms.f0.value = value;
+            }
         };
-
-        var shaderMaterial = new THREE.ShaderMaterial( {
-            uniforms:       uniforms,
-            vertexShader:   vertexShader,
-            fragmentShader: fragmentShader,
-            blending:       THREE.AdditiveBlending,
-            depthTest:      false,
-            lights:         true,
-            side: THREE.DoubleSide
-        });
 
         var buffergeometry = new THREE.BufferGeometry();
 
-        var indices = [];
+        var point_indices = [];
+        var triangles = [];
         var Abuffer = [];
         var Bbuffer = [];
         var Cbuffer = [];
         var Dbuffer = [];
         var fbuffer = [];
+        var positions = [];
         
         // debugging...
+        /*
         for (var triangle=0; triangle<2; triangle++) {
             for (var point_index=0; point_index<3; point_index++) {
-                indices.push(triangle, point_index, 0);
+                point_indices.push(point_index);
+                triangles.push(triangle);
                 Abuffer.push(0, 0, 0);
                 Bbuffer.push(0, 1, 0);
                 Cbuffer.push(1, 0, 0);
-                Dbuffer.push(0, 0, 1);
-                fbuffer.push(0, 1, 1, 1);
+                Dbuffer.push(1, 1, 1);
+                fbuffer.push(-10, 10, 10, -10);
+                positions.push(point_index, triangle, 0);
             }
         }
-/*
+        */
+
+        var Boffsets = [[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 1, 0], [1, 0, 0]]
+        var Coffsets = [[0, 1, 1], [0, 1, 1], [1, 0, 1], [1, 0, 1], [1, 1, 0], [1, 1, 0]]
         for (var i=0; i<nrows-1; i++) {
-            var rowi = coords[i];
-            var rowi1 = coords[i+1];
+            //var rowi = coords[i];
+            //var rowi1 = coords[i+1];
             for (var j=0; j<ncols-1; j++) {
-                var ll = rowi[j];
-                var lr = rowi[j+1];
-                var ul = rowi1[j];
-                var ur = rowi1[j+1];
-                for (var ind=0; ind<2; ind++) {
-                    indices.push(ind);
-                    Abuffer.push(ll[0], ll[1], ll[2]);
-                    Bbuffer.push(lr[0], lr[1], lr[2]);
-                    Cbuffer.push(ur[0], ur[1], ur[2]);
-                    fbuffer.push(ll[3], lr[3], ur[3])
-                }
-                for (var ind=0; ind<2; ind++) {
-                    indices.push(ind);
-                    Abuffer.push(ll[0], ll[1], ll[2]);
-                    Bbuffer.push(ul[0], ul[1], ul[2]);
-                    Cbuffer.push(ur[0], ur[1], ur[2]);
-                    fbuffer.push(ll[3], ul[3], ur[3])
+                //var ll = rowi[j];
+                //var lr = rowi[j+1];
+                //var ul = rowi1[j];
+                //var ur = rowi1[j+1];
+                for (var k=0; k<ndepth-1; k++){
+                    for (var tetra=0; tetra<6; tetra++) {
+                        var Bo = Boffsets[tetra];
+                        var Co = Coffsets[tetra];
+                        for (var triangle=0; triangle<2; triangle++) {
+                            for (var ind=0; ind<3; ind++) {
+                                // XXX need to do 6 tetrahedra...
+                                var Av = coords[i][j][k];
+                                var Bv = coords[i+Bo[0]][j+Bo[1]][k+Bo[2]];
+                                var Cv = coords[i+Co[0]][j+Co[1]][k+Co[2]];
+                                var Dv = coords[i+1][j+1][k+1];
+                                point_indices.push(ind);
+                                triangles.push(triangle);
+                                positions.push(Av[0], Av[1], Av[2]);
+                                Abuffer.push(Av[0], Av[1], Av[2]);
+                                Bbuffer.push(Bv[0], Bv[1], Bv[2]);
+                                Cbuffer.push(Cv[0], Cv[1], Cv[2]);
+                                Dbuffer.push(Dv[0], Dv[1], Dv[2]);
+                                fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3])
+                            }
+                        }
+                    }
                 }
             }
-        } */
+        }
         buffergeometry.addAttribute("A",
             (new THREE.BufferAttribute( new Float32Array(Abuffer), 3)));
         buffergeometry.addAttribute("B",
@@ -585,19 +645,25 @@
             (new THREE.BufferAttribute( new Float32Array(Dbuffer), 3)));
         buffergeometry.addAttribute("fABCD",
             (new THREE.BufferAttribute( new Float32Array(fbuffer), 4)));
+        buffergeometry.addAttribute("triangle",
+            (new THREE.BufferAttribute( new Float32Array(triangles), 1)));
+        buffergeometry.addAttribute("point_index",
+            (new THREE.BufferAttribute( new Float32Array(point_indices), 1)));
         buffergeometry.addAttribute("position",
-            (new THREE.BufferAttribute( new Float32Array(indices), 3)));
+            (new THREE.BufferAttribute( new Float32Array(positions), 3)));
 
-        var object = new THREE.Mesh( buffergeometry, shaderMaterial );
+        var object = new THREE.Mesh( buffergeometry, material );
 
-        var result = {
-            // encapsulated interface
-            object: object,
-            geometry: buffergeometry,
-            material: shaderMaterial,
-            uniforms: uniforms,
-            setValue: setValue
-        };
+        //var result = {
+        // encapsulated interface, and useful debug values :)
+        result.object = object;
+        result.geometry = buffergeometry,
+        result.material = material;
+        result.shader = materialShader;
+        result.vertexShader = vertexShader;
+        result.fragmentShader = fragmentShader;
+        result.uniforms = uniforms;
+        result.setValue = setValue;
         return result;
     };
 
