@@ -573,7 +573,7 @@
             }
         };
 
-        var buffergeometry = new THREE.BufferGeometry();
+        var buffergeometry = new THREE.InstancedBufferGeometry();
 
         var point_indices = [];
         var triangles = [];
@@ -602,6 +602,7 @@
 
         var Boffsets = [[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 1, 0], [1, 0, 0]]
         var Coffsets = [[0, 1, 1], [0, 1, 1], [1, 0, 1], [1, 0, 1], [1, 1, 0], [1, 1, 0]]
+        // per instance
         for (var i=0; i<nrows-1; i++) {
             //var rowi = coords[i];
             //var rowi1 = coords[i+1];
@@ -614,43 +615,69 @@
                     for (var tetra=0; tetra<6; tetra++) {
                         var Bo = Boffsets[tetra];
                         var Co = Coffsets[tetra];
-                        for (var triangle=0; triangle<2; triangle++) {
-                            for (var ind=0; ind<3; ind++) {
+                        //for (var triangle=0; triangle<2; triangle++) {
+                            //for (var ind=0; ind<3; ind++) {
                                 // XXX need to do 6 tetrahedra...
                                 var Av = coords[i][j][k];
                                 var Bv = coords[i+Bo[0]][j+Bo[1]][k+Bo[2]];
                                 var Cv = coords[i+Co[0]][j+Co[1]][k+Co[2]];
                                 var Dv = coords[i+1][j+1][k+1];
-                                point_indices.push(ind);
-                                triangles.push(triangle);
-                                positions.push(Av[0], Av[1], Av[2]);
+                                //point_indices.push(ind);
+                                //triangles.push(triangle);
+                                //positions.push(Av[0], Av[1], Av[2]);
                                 Abuffer.push(Av[0], Av[1], Av[2]);
                                 Bbuffer.push(Bv[0], Bv[1], Bv[2]);
                                 Cbuffer.push(Cv[0], Cv[1], Cv[2]);
                                 Dbuffer.push(Dv[0], Dv[1], Dv[2]);
                                 fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3])
-                            }
-                        }
+                            //}
+                        //}
                     }
                 }
             }
         }
+        // per mesh
+        for (var triangle=0; triangle<2; triangle++) {
+            for (var ind=0; ind<3; ind++) {
+                point_indices.push(ind);
+                triangles.push(triangle);
+                positions.push(Abuffer[0], Abuffer[1], Abuffer[2]);  // dummy values
+            }
+        }
+        // per instance
+        //buffergeometry.addAttribute("A",
+        //    (new THREE.BufferAttribute( new Float32Array(Abuffer), 3)));
         buffergeometry.addAttribute("A",
-            (new THREE.BufferAttribute( new Float32Array(Abuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Abuffer), 3)));
         buffergeometry.addAttribute("B",
-            (new THREE.BufferAttribute( new Float32Array(Bbuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Bbuffer), 3)));
         buffergeometry.addAttribute("C",
-            (new THREE.BufferAttribute( new Float32Array(Cbuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Cbuffer), 3)));
         buffergeometry.addAttribute("D",
-            (new THREE.BufferAttribute( new Float32Array(Dbuffer), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(Dbuffer), 3)));
         buffergeometry.addAttribute("fABCD",
-            (new THREE.BufferAttribute( new Float32Array(fbuffer), 4)));
-        buffergeometry.addAttribute("triangle",
-            (new THREE.BufferAttribute( new Float32Array(triangles), 1)));
-        buffergeometry.addAttribute("point_index",
-            (new THREE.BufferAttribute( new Float32Array(point_indices), 1)));
-        buffergeometry.addAttribute("position",
-            (new THREE.BufferAttribute( new Float32Array(positions), 3)));
+            (new THREE.InstancedBufferAttribute( new Float32Array(fbuffer), 4)));
+        //buffergeometry.addAttribute("B",
+        //    (new THREE.BufferAttribute( new Float32Array(Bbuffer), 3)));
+        //buffergeometry.addAttribute("C",
+        //    (new THREE.BufferAttribute( new Float32Array(Cbuffer), 3)));
+        //buffergeometry.addAttribute("D",
+        //    (new THREE.BufferAttribute( new Float32Array(Dbuffer), 3)));
+        //buffergeometry.addAttribute("fABCD",
+        //    (new THREE.BufferAttribute( new Float32Array(fbuffer), 4)));
+        // per mesh
+        var triangle_index = new THREE.Float32BufferAttribute( triangles, 1 );
+        buffergeometry.addAttribute("triangle", triangle_index);
+        var point_index = new THREE.Float32BufferAttribute( point_indices, 1 );
+        buffergeometry.addAttribute("point_index", point_index);
+        var position_buffer = new THREE.Float32BufferAttribute( positions, 3 );
+        buffergeometry.addAttribute("position", position_buffer);
+        //buffergeometry.addAttribute("triangle",
+        //    (new THREE.BufferAttribute( new Float32Array(triangles), 1)));
+        //buffergeometry.addAttribute("point_index",
+        //    (new THREE.BufferAttribute( new Float32Array(point_indices), 1)));
+        //buffergeometry.addAttribute("position",
+        //    (new THREE.BufferAttribute( new Float32Array(positions), 3)));
 
         var object = new THREE.Mesh( buffergeometry, material );
 
