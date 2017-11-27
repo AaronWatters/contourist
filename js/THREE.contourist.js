@@ -395,35 +395,6 @@
             }
         }
 
-        var uniforms = {
-            color: { type: "c", value: new THREE.Color( 0xffffff ) },
-            opacity:   { type: "f", value: 1.0 },
-            f0:   { type: "f", value: value },
-            delta:   { type: "f", value: delta }
-        };
-
-        var setValue = function(value) {
-            uniforms.f0.value = value;
-        }
-        var setDelta = function(value) {
-            uniforms.delta.value = value;
-        }
-        var setOpacity = function(value) {
-            uniforms.opacity.value = value;
-        }
-
-        var shaderMaterial = new THREE.ShaderMaterial( {
-            uniforms:       uniforms,
-            vertexShader:   Irregular2D_Vertex_Shader,
-            fragmentShader: Irregular2D_Fragment_Shader,
-            //blending:       THREE.AdditiveBlending,
-            //depthTest:      false,
-            transparent:    true
-        });
-
-        var buffergeometry = new THREE.InstancedBufferGeometry();
-
-        var indices = [0, 1];
         var Abuffer = [];
         var Bbuffer = [];
         var Cbuffer = [];
@@ -455,24 +426,46 @@
             }
         }
 
+        return Triangular(Abuffer, Bbuffer, Cbuffer, fbuffer, value, delta);
+    };
+
+    var Triangular = function(Abuffer, Bbuffer, Cbuffer, fbuffer, value, delta) {
+
+        var uniforms = {
+            color: { type: "c", value: new THREE.Color( 0xffffff ) },
+            opacity:   { type: "f", value: 1.0 },
+            f0:   { type: "f", value: value },
+            delta:   { type: "f", value: delta }
+        };
+
+        var setValue = function(value) {
+            uniforms.f0.value = value;
+        }
+        var setDelta = function(value) {
+            uniforms.delta.value = value;
+        }
+        var setOpacity = function(value) {
+            uniforms.opacity.value = value;
+        }
+
+        var shaderMaterial = new THREE.ShaderMaterial( {
+            uniforms:       uniforms,
+            vertexShader:   Irregular2D_Vertex_Shader,
+            fragmentShader: Irregular2D_Fragment_Shader,
+            //blending:       THREE.AdditiveBlending,
+            //depthTest:      false,
+            transparent:    true
+        });
+
+        var buffergeometry = new THREE.InstancedBufferGeometry();
+
+        var indices = [0, 1];
+
         var mn = extremum(Abuffer, Math.min);
         var mx = extremum(Bbuffer, Math.max);
         var positions = [mn, mn, mn, mx, mx, mx];
-        // XXXX DEBUG
-        /*
-        indices = [0,1];
-        Abuffer = [1,0,0];
-        Bbuffer = [0,1,0];
-        Cbuffer = [1,1,0];
-        fbuffer = [0,1,1];
-        */
-        //geometry.maxInstancedCount = (nrows - 1) * (ncols - 1);
-        //buffergeometry.addAttribute("point_index",
-        //    (new THREE.BufferAttribute( new Float32Array(indices), 1)));
+
         // per mesh
-        //var indexb = new THREE.InterleavedBuffer( new Float32Array( indices ), 2);  // two items each mesh
-        //var point_index = new THREE.InterleavedBufferAttribute( indexb, 1, 0);  // one each per vertex starting at offset 0
-        //var point_index = new THREE.BufferAttribute( new Float32Array(indices), 1 )
         var point_index = new THREE.Float32BufferAttribute( indices, 1 );
         buffergeometry.addAttribute("point_index", point_index);
         var position_buffer = new THREE.Float32BufferAttribute( positions, 3 );
@@ -481,14 +474,6 @@
         // per instance
         buffergeometry.addAttribute("A",
             (new THREE.InstancedBufferAttribute( new Float32Array(Abuffer), 3)));
-        //var Ab = new THREE.InstancedInterleavedBuffer(Abuffer, 3, 1 ).setDynamic( true );
-        //buffergeometry.addAttribute("A", Ab);
-        //var Bb = new THREE.InstancedInterleavedBuffer(Bbuffer, 3, 1 ).setDynamic( true );
-        //buffergeometry.addAttribute("B", Bb);
-        //var Cb = new THREE.InstancedInterleavedBuffer(Cbuffer, 3, 1 ).setDynamic( true );
-        //buffergeometry.addAttribute("C", Cb);
-        //var positionb = new THREE.InstancedInterleavedBuffer(fbuffer, 3, 1 ).setDynamic( true );
-        //buffergeometry.addAttribute("position", positionb);
         buffergeometry.addAttribute("B",
             (new THREE.InstancedBufferAttribute( new Float32Array(Bbuffer), 3)));
         buffergeometry.addAttribute("C",
@@ -784,6 +769,7 @@
     var contourist = {
         Tetrahedral: Tetrahedral,
         Irregular3D: Irregular3D,
+        Triangular: Triangular,
         Irregular2D: Irregular2D,
         Regular2D: Regular2D
     };
