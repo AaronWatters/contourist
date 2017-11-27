@@ -17,6 +17,27 @@
     if( !THREE ) {
         throw new Error( 'THREE.contourist requires three.js' );
     }
+
+    // Test if samples have value in range or crossing range.
+    var inrange = function(limits, samples) {
+        var low_limit = limits[0];
+        var high_limit = limits[1];
+        var below = false;
+        var above = false;
+        for (var i=0; i<samples.length; i++) {
+            var si = samples[i];
+            if (si < low_limit) {
+                below = true;
+            } else {
+                if (si > high_limit) {
+                    above = true;
+                } else {
+                    return true;  // shortcut: point in range
+                }
+            }
+        }
+        return (below && above);  // samples cross limits.
+    }
     
     var extremum = function(numArray, mnmx) {
         var result = numArray[0];  // apply blows out the stack.
@@ -377,7 +398,7 @@
 
     // coords: rectangular 2d grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
-    var Irregular2D = function(coords, value, delta) {
+    var Irregular2D = function(coords, value, delta, limits) {
         
         var nrows = coords.length;
         var ncols = coords[0].length;
@@ -411,17 +432,25 @@
                 var ur = rowi1[j+1];
                 //for (var ind=0; ind<2; ind++) {
                     //indices.push(ind);
+                var v1 = ll[3]; var v2 = lr[3]; var v3 = ur[3];
+                if ((!limits) || (inrange(limits, [v1, v2, v3]))) {
                     Abuffer.push(ll[0], ll[1], ll[2]);
                     Bbuffer.push(lr[0], lr[1], lr[2]);
                     Cbuffer.push(ur[0], ur[1], ur[2]);
-                    fbuffer.push(ll[3], lr[3], ur[3])
+                    fbuffer.push(v1, v2, v3)
+                }
+                    //fbuffer.push(ll[3], lr[3], ur[3])
                 //}
                 //for (var ind=0; ind<2; ind++) {
                     //indices.push(ind);
+                v2 = ul[3];
+                if ((!limits) || (inrange(limits, [v1, v2, v3]))) {
                     Abuffer.push(ll[0], ll[1], ll[2]);
                     Bbuffer.push(ul[0], ul[1], ul[2]);
                     Cbuffer.push(ur[0], ur[1], ur[2]);
                     fbuffer.push(ll[3], ul[3], ur[3])
+                    //fbuffer.push(ll[3], ul[3], ur[3])
+                }
                 //}
             }
         }
@@ -498,7 +527,7 @@
     
     // coords: rectangular 3d grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
-    var Irregular3D = function(coords, value, material) {
+    var Irregular3D = function(coords, value, material, limits) {
         
         var nrows = coords.length;
         var ncols = coords[0].length;
@@ -548,11 +577,15 @@
                                 //point_indices.push(ind);
                                 //triangles.push(triangle);
                                 //positions.push(Av[0], Av[1], Av[2]);
-                                Abuffer.push(Av[0], Av[1], Av[2]);
-                                Bbuffer.push(Bv[0], Bv[1], Bv[2]);
-                                Cbuffer.push(Cv[0], Cv[1], Cv[2]);
-                                Dbuffer.push(Dv[0], Dv[1], Dv[2]);
-                                fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3])
+                                var v1 = Av[3]; var v2 = Bv[3]; var v3 = Cv[3]; var v4 = Dv[3];
+                                if ((!limits) || (inrange(limits, [v1, v2, v3, v4]))) {
+                                    Abuffer.push(Av[0], Av[1], Av[2]);
+                                    Bbuffer.push(Bv[0], Bv[1], Bv[2]);
+                                    Cbuffer.push(Cv[0], Cv[1], Cv[2]);
+                                    Dbuffer.push(Dv[0], Dv[1], Dv[2]);
+                                    fbuffer.push(v1, v2, v3, v4);
+                                    //fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3]);
+                                }
                             //}
                         //}
                     }
