@@ -514,11 +514,6 @@
     // coords: rectangular 3d grid of (x, y, z, f(x,y,z))
     //   for point positions and field values.
     var Irregular3D = function(coords, value, material) {
-
-        if (!material) {
-            material = new THREE.MeshNormalMaterial();
-        }
-        material.side = THREE.DoubleSide;
         
         var nrows = coords.length;
         var ncols = coords[0].length;
@@ -543,6 +538,53 @@
             }
         }
 
+        var Abuffer = [];
+        var Bbuffer = [];
+        var Cbuffer = [];
+        var Dbuffer = [];
+        var fbuffer = [];
+
+        var Boffsets = [[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 1, 0], [1, 0, 0]]
+        var Coffsets = [[0, 1, 1], [0, 1, 1], [1, 0, 1], [1, 0, 1], [1, 1, 0], [1, 1, 0]]
+        // per instance
+        for (var i=0; i<nrows-1; i++) {
+            for (var j=0; j<ncols-1; j++) {
+                for (var k=0; k<ndepth-1; k++){
+                    for (var tetra=0; tetra<6; tetra++) {
+                        var Bo = Boffsets[tetra];
+                        var Co = Coffsets[tetra];
+                        //for (var triangle=0; triangle<2; triangle++) {
+                            //for (var ind=0; ind<3; ind++) {
+                                // XXX need to do 6 tetrahedra...
+                                var Av = coords[i][j][k];
+                                var Bv = coords[i+Bo[0]][j+Bo[1]][k+Bo[2]];
+                                var Cv = coords[i+Co[0]][j+Co[1]][k+Co[2]];
+                                var Dv = coords[i+1][j+1][k+1];
+                                //point_indices.push(ind);
+                                //triangles.push(triangle);
+                                //positions.push(Av[0], Av[1], Av[2]);
+                                Abuffer.push(Av[0], Av[1], Av[2]);
+                                Bbuffer.push(Bv[0], Bv[1], Bv[2]);
+                                Cbuffer.push(Cv[0], Cv[1], Cv[2]);
+                                Dbuffer.push(Dv[0], Dv[1], Dv[2]);
+                                fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3])
+                            //}
+                        //}
+                    }
+                }
+            }
+        }
+
+        return Tetrahedral(Abuffer, Bbuffer, Cbuffer, Dbuffer, fbuffer, material);
+    }
+
+    // Tetrahedral vertices with function values at each vertex.
+    var Tetrahedral = function(Abuffer, Bbuffer, Cbuffer, Dbuffer, fbuffer, material) {
+
+        if (!material) {
+            material = new THREE.MeshNormalMaterial();
+        }
+        material.side = THREE.DoubleSide;
         var materialShader;
         var uniforms;
         var vertexShader;
@@ -576,65 +618,8 @@
 
         var point_indices = [];
         var triangles = [];
-        var Abuffer = [];
-        var Bbuffer = [];
-        var Cbuffer = [];
-        var Dbuffer = [];
-        var fbuffer = [];
         var positions = [];
-        
-        // debugging...
-        /*
-        for (var triangle=0; triangle<2; triangle++) {
-            for (var point_index=0; point_index<3; point_index++) {
-                point_indices.push(point_index);
-                triangles.push(triangle);
-                Abuffer.push(0, 0, 0);
-                Bbuffer.push(0, 1, 0);
-                Cbuffer.push(1, 0, 0);
-                Dbuffer.push(1, 1, 1);
-                fbuffer.push(-10, 10, 10, -10);
-                positions.push(point_index, triangle, 0);
-            }
-        }
-        */
 
-        var Boffsets = [[0, 0, 1], [0, 1, 0], [0, 0, 1], [1, 0, 0], [0, 1, 0], [1, 0, 0]]
-        var Coffsets = [[0, 1, 1], [0, 1, 1], [1, 0, 1], [1, 0, 1], [1, 1, 0], [1, 1, 0]]
-        // per instance
-        for (var i=0; i<nrows-1; i++) {
-            //var rowi = coords[i];
-            //var rowi1 = coords[i+1];
-            for (var j=0; j<ncols-1; j++) {
-                //var ll = rowi[j];
-                //var lr = rowi[j+1];
-                //var ul = rowi1[j];
-                //var ur = rowi1[j+1];
-                for (var k=0; k<ndepth-1; k++){
-                    for (var tetra=0; tetra<6; tetra++) {
-                        var Bo = Boffsets[tetra];
-                        var Co = Coffsets[tetra];
-                        //for (var triangle=0; triangle<2; triangle++) {
-                            //for (var ind=0; ind<3; ind++) {
-                                // XXX need to do 6 tetrahedra...
-                                var Av = coords[i][j][k];
-                                var Bv = coords[i+Bo[0]][j+Bo[1]][k+Bo[2]];
-                                var Cv = coords[i+Co[0]][j+Co[1]][k+Co[2]];
-                                var Dv = coords[i+1][j+1][k+1];
-                                //point_indices.push(ind);
-                                //triangles.push(triangle);
-                                //positions.push(Av[0], Av[1], Av[2]);
-                                Abuffer.push(Av[0], Av[1], Av[2]);
-                                Bbuffer.push(Bv[0], Bv[1], Bv[2]);
-                                Cbuffer.push(Cv[0], Cv[1], Cv[2]);
-                                Dbuffer.push(Dv[0], Dv[1], Dv[2]);
-                                fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3])
-                            //}
-                        //}
-                    }
-                }
-            }
-        }
         // per mesh
         for (var triangle=0; triangle<2; triangle++) {
             for (var ind=0; ind<3; ind++) {
@@ -836,6 +821,7 @@
 
     // Exported functionality:
     var contourist = {
+        Tetrahedral: Tetrahedral,
         Irregular3D: Irregular3D,
         Irregular2D: Irregular2D,
         Regular2D: Regular2D
