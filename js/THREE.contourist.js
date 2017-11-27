@@ -140,7 +140,6 @@
     //    valid_triangle = false;
     //}
     if (valid_triangle) {
-        visible = 1.0; // ???? XXXX
         if (two_triangles || (triangle < 0.5)) {
             visible = 1.0;
         }
