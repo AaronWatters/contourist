@@ -94,6 +94,11 @@
 				}
 				array.push(row);
 			}
+			var truncate = (maxf - minf) * 0.022;
+			var tmax = maxf - truncate;
+			var tmin = minf + truncate;
+			var limits = [tmin, tmax];
+			var material = null;
 			/*
 			array = [];
 			v = 10.0;
@@ -117,7 +122,7 @@
 				v = -v;
 			}
 			*/
-			info = THREE.contourist.Irregular3D(array, value);
+			info = THREE.contourist.Irregular3D(array, value, material, limits);
 			scene.add(info.object);
 
 			renderer = new THREE.WebGLRenderer( { antialias: true } );
