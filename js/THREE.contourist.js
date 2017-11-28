@@ -2,9 +2,6 @@
 // Some general structure inspired by
 // https://github.com/spite/THREE.MeshLine/blob/master/src/THREE.MeshLine.js
 
-// Lighting logic from here:
-// https://csantosbh.wordpress.com/2014/01/09/custom-shaders-with-three-js-uniforms-textures-and-lighting/
-
 ;(function() {
     
     "use strict";
@@ -26,6 +23,10 @@
         var above = false;
         for (var i=0; i<samples.length; i++) {
             var si = samples[i];
+            // null is always out of range (no value)
+            if (si == null) {
+                return false;
+            }
             if (si < low_limit) {
                 below = true;
             } else {
@@ -40,9 +41,16 @@
     }
     
     var extremum = function(numArray, mnmx) {
-        var result = numArray[0];  // apply blows out the stack.
+        var result = null;  // apply blows out the stack.
         for (var i=1; i<numArray.length; i++) {
-            result = mnmx(result, numArray[i]);
+            var nA = numArray[i];
+            if (nA != null) {
+                if (result == null) {
+                    result = nA;
+                } else {
+                    result = mnmx(result, numArray[i]);
+                }
+            }
         }
         return result;
     };
@@ -271,7 +279,7 @@
 
     var shader_program_start = 'void main() {';
 
-    // added_ihitial calculations should define vec3's override_vertex and override_normal
+    // added_initial calculations should define vec3's override_vertex and override_normal
     //   and also set visible to 1.0 or 0.0.
     var patch_vertex_shader = function(
         source_shader,
@@ -482,7 +490,7 @@
         
         var nrows = coords.length;
         var ncols = coords[0].length;
-        // validate
+        // validate -- rows and columns must all be full length, vectors can be "null"
         for (var i=0; i<nrows; i++) {
             var row = coords[i];
             if (row.length != ncols) {
@@ -490,7 +498,8 @@
             }
             for (var j=0; j<ncols; j++) {
                 var vector = row[j];
-                if (vector.length != 4) {
+                // allow null vectors for "skip this".
+                if ((vector!=null) && (vector.length != 4)) {
                     throw new Error("all vector elements shoud have (x, y, z, f)");
                 }
             }
@@ -510,28 +519,29 @@
                 var lr = rowi[j+1];
                 var ul = rowi1[j];
                 var ur = rowi1[j+1];
-                //for (var ind=0; ind<2; ind++) {
-                    //indices.push(ind);
-                var v1 = ll[3]; var v2 = lr[3]; var v3 = ur[3];
-                if ((!limits) || (inrange(limits, [v1, v2, v3]))) {
-                    Abuffer.push(ll[0], ll[1], ll[2]);
-                    Bbuffer.push(lr[0], lr[1], lr[2]);
-                    Cbuffer.push(ur[0], ur[1], ur[2]);
-                    fbuffer.push(v1, v2, v3)
+                if ((ll != null) && (lr != null) && (ul != null) && (ur != null)) {
+                    //for (var ind=0; ind<2; ind++) {
+                        //indices.push(ind);
+                    var v1 = ll[3]; var v2 = lr[3]; var v3 = ur[3];
+                    if ((!limits) || (inrange(limits, [v1, v2, v3]))) {
+                        Abuffer.push(ll[0], ll[1], ll[2]);
+                        Bbuffer.push(lr[0], lr[1], lr[2]);
+                        Cbuffer.push(ur[0], ur[1], ur[2]);
+                        fbuffer.push(v1, v2, v3);
+                    }
+                        //fbuffer.push(ll[3], lr[3], ur[3])
+                    //}
+                    //for (var ind=0; ind<2; ind++) {
+                        //indices.push(ind);
+                    v2 = ul[3];
+                    if ((!limits) || (inrange(limits, [v1, v2, v3]))) {
+                        Abuffer.push(ll[0], ll[1], ll[2]);
+                        Bbuffer.push(ul[0], ul[1], ul[2]);
+                        Cbuffer.push(ur[0], ur[1], ur[2]);
+                        fbuffer.push(v1, v2, v3);
+                        //fbuffer.push(ll[3], ul[3], ur[3])
+                    }
                 }
-                    //fbuffer.push(ll[3], lr[3], ur[3])
-                //}
-                //for (var ind=0; ind<2; ind++) {
-                    //indices.push(ind);
-                v2 = ul[3];
-                if ((!limits) || (inrange(limits, [v1, v2, v3]))) {
-                    Abuffer.push(ll[0], ll[1], ll[2]);
-                    Bbuffer.push(ul[0], ul[1], ul[2]);
-                    Cbuffer.push(ur[0], ur[1], ur[2]);
-                    fbuffer.push(ll[3], ul[3], ur[3])
-                    //fbuffer.push(ll[3], ul[3], ur[3])
-                }
-                //}
             }
         }
 
@@ -624,8 +634,9 @@
                     throw new Error("all depth lengths should be the same");
                 }
                 for (var k=0; k<ndepth; k++) {
+                    // allow vector elements to be null for "skip this one".
                     var vector = depth[k];
-                    if (vector.length != 4) {
+                    if ((vector != null) && (vector.length != 4)) {
                         throw new Error("all vector elements shoud have (x, y, z, f)");
                     }
                 }
@@ -657,14 +668,16 @@
                                 //point_indices.push(ind);
                                 //triangles.push(triangle);
                                 //positions.push(Av[0], Av[1], Av[2]);
-                                var v1 = Av[3]; var v2 = Bv[3]; var v3 = Cv[3]; var v4 = Dv[3];
-                                if ((!limits) || (inrange(limits, [v1, v2, v3, v4]))) {
-                                    Abuffer.push(Av[0], Av[1], Av[2]);
-                                    Bbuffer.push(Bv[0], Bv[1], Bv[2]);
-                                    Cbuffer.push(Cv[0], Cv[1], Cv[2]);
-                                    Dbuffer.push(Dv[0], Dv[1], Dv[2]);
-                                    fbuffer.push(v1, v2, v3, v4);
-                                    //fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3]);
+                                if ((Av != null) && (Bv != null) && (Cv != null) && (Dv != null)) {
+                                    var v1 = Av[3]; var v2 = Bv[3]; var v3 = Cv[3]; var v4 = Dv[3];
+                                    if ((!limits) || (inrange(limits, [v1, v2, v3, v4]))) {
+                                        Abuffer.push(Av[0], Av[1], Av[2]);
+                                        Bbuffer.push(Bv[0], Bv[1], Bv[2]);
+                                        Cbuffer.push(Cv[0], Cv[1], Cv[2]);
+                                        Dbuffer.push(Dv[0], Dv[1], Dv[2]);
+                                        fbuffer.push(v1, v2, v3, v4);
+                                        //fbuffer.push(Av[3], Bv[3], Cv[3], Dv[3]);
+                                    }
                                 }
                             //}
                         //}
