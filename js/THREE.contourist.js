@@ -47,6 +47,16 @@
         return result;
     };
 
+    var default_vector3 = function(x, a, b, c) {
+        if (x) {
+            if (!Array.isArray(x)) {
+                return x;
+            }
+            a = x[0]; b = x[1]; c = x[2];
+        }
+        return new THREE.Vector3(a, b, c);
+    }
+
     var Irregular3D_Declarations = `
     uniform float f0;
 
@@ -58,7 +68,14 @@
     attribute float triangle;
     attribute float point_index;
     `;
-    //var Irregular3D_Declarations = ''; // XXXXXX
+    
+    var Regular3D_Declarations = `
+    uniform float f0;
+    uniform vec3 origin, u_dir, v_dir, w_dir;
+
+    attribute vec3 ijk, indices;
+    attribute vec4 fbuffer_w0, fbuffer_w1;
+    `; 
 
     var Irregular3D_Core = `
     visible = 0.0;  // default to invisible.
@@ -187,7 +204,70 @@
     }
     `;
 
-    //Irregular3D_Core = '';  // XXXXX
+    var Regular3D_Core = `
+    float f_origin = fbuffer_w0[0];
+    float f_v = fbuffer_w0[1];
+    float f_u = fbuffer_w0[2];
+    float f_uv = fbuffer_w0[3];
+    float f_w = fbuffer_w1[0];
+    float f_vw = fbuffer_w1[1];
+    float f_uw = fbuffer_w1[2];
+    float f_uvw = fbuffer_w1[3];
+    
+    float i = ijk[0];
+    float j = ijk[1];
+    float k = ijk[2];
+    
+    // indices: vertex, triangle, tetra
+    float tetrahedron = indices[2];
+    float triangle = indices[1];
+    float point_index = indices[0];
+    
+    vec3 A = origin + (i * u_dir) + (j * v_dir) + (k * w_dir);
+    float f_A = f_origin;
+    vec3 D = A + u_dir + v_dir + w_dir;
+    float f_D = f_uvw;
+    
+    vec3 B, C;
+    float f_B, f_C;
+    if ((tetrahedron > -0.5) && (tetrahedron < 0.5)) {
+        B = A + w_dir;
+        f_B = f_w;
+        C = A + v_dir + w_dir;
+        f_C = f_vw;
+    }
+    if ((tetrahedron > 0.5) && (tetrahedron < 1.5)) {
+        B = A + v_dir;
+        f_B = f_v;
+        C = A + v_dir + w_dir;
+        f_C = f_vw;
+    }
+    if ((tetrahedron > 1.5) && (tetrahedron < 2.5)) {
+        B = A + w_dir;
+        f_B = f_w;
+        C = A + u_dir + w_dir;
+        f_C = f_uw;
+    }
+    if ((tetrahedron > 2.5) && (tetrahedron < 3.5)) {
+        B = A + u_dir;
+        f_B = f_u;
+        C = A + u_dir + w_dir;
+        f_C = f_uw;
+    }
+    if ((tetrahedron > 3.5) && (tetrahedron < 4.5)) {
+        B = A + v_dir;
+        f_B = f_v;
+        C = A + u_dir + v_dir;
+        f_C = f_uv;
+    }
+    if ((tetrahedron > 4.5) && (tetrahedron < 5.5)) {
+        B = A + u_dir;
+        f_B = f_u;
+        C = A + u_dir + v_dir;
+        f_C = f_uv;
+    }
+    vec4 fABCD = vec4(f_A, f_B, f_C, f_D);
+    ` + Irregular3D_Core;  // XXXXX
 
     var shader_program_start = 'void main() {';
 
@@ -683,7 +763,7 @@
 
     // coords: rectangular grid of f(x,y,z) field values
     //   for point positions on regular grid.
-    var Regular2D = function(values, value, delta, origin, u, v) {
+    var Regular2D = function(values, value, delta, origin, u, v, limits) {
 
         var nrows = values.length;
         var ncols = values[0].length;
@@ -693,15 +773,6 @@
             if (row.length != ncols) {
                 throw new Error("all rows must have the same length.");
             }
-        }
-        var default_vector3 = function(x, a, b, c) {
-            if (x) {
-                if (!Array.isArray(x)) {
-                    return x;
-                }
-                a = x[0]; b = x[1]; c = x[2];
-            }
-            return new THREE.Vector3(a, b, c);
         }
         origin = default_vector3(origin, 0, 0, 0);
         u = default_vector3(u, 1, 0, 0);
@@ -716,7 +787,6 @@
             v: { type: "v3", value: v },
             origin: { type: "v3", value: origin },
         };
-        debugger;
 
         var setValue = function(value) {
             uniforms.f0.value = value;
@@ -755,22 +825,24 @@
                 var lr = rowi[j+1];
                 var ul = rowi1[j];
                 var ur = rowi1[j+1];
-                fbuffer.push(ll, lr, ul, ur);
-                ij.push(i, j);
+                if ((!limits) || (inrange(limits, [ll, lr, ul, ur]))) {
+                    fbuffer.push(ll, lr, ul, ur);
+                    ij.push(i, j);
+                }
             }
         }
-        var e0 = origin[0] + u[0] + v[0]
-        var e1 = origin[1] + u[1] + v[1]
-        var e2 = origin[2] + u[2] + v[2]
+        var e0 = origin.x + u.x + v.x;
+        var e1 = origin.y + u.y + v.y;
+        var e2 = origin.z + u.z + v.z;
         for (var triangle=0; triangle<2; triangle++) {
             for (var ind=0; ind<2; ind++) {
                 indices.push(ind, triangle);
                 positions.push(e0, e1, e2); // dummy value
             }
         }
-        positions[0] = origin[0];
-        positions[1] = origin[1];
-        positions[2] = origin[2];
+        positions[0] = origin.x;
+        positions[1] = origin.y;
+        positions[2] = origin.z;
 
         // add per mesh attributes
         var indices_b = new THREE.Float32BufferAttribute( indices, 2 );
@@ -796,7 +868,129 @@
             setOpacity: setOpacity
         };
         return result;
-    }
+    };
+
+    var Regular3D = function(values, value, origin, u, v, w, material, limits) {
+        var nrows = values.length;
+        var ncols = values[0].length;
+        var ndepth = values[0][0].length;
+        // validate
+        for (var i=0; i<nrows; i++) {
+            var row = values[i];
+            if (row.length != ncols) {
+                throw new Error("all rows must have the same length.");
+            }
+            for (var j=0; j<ncols; j++) {
+                var depth = row[j];
+                if (depth.length != ndepth) {
+                    throw new Error("all depths must have the same length.");
+                }
+            }
+        }
+        origin = default_vector3(origin, 0, 0, 0);
+        u = default_vector3(u, 1, 0, 0);
+        v = default_vector3(v, 0, 1, 0);
+        w = default_vector3(w, 0, 0, 1);
+        debugger;
+        if (!material) {
+            material = new THREE.MeshNormalMaterial();
+        }
+        material.side = THREE.DoubleSide;
+        var materialShader;
+        var uniforms;
+        var vertexShader;
+        var fragmentShader;
+        var result = {};
+
+        material.onBeforeCompile = function ( shader ) {            
+            uniforms = shader.uniforms;
+            uniforms["f0"] = { type: "f", value: value };
+            uniforms["origin"] = { type: "v3", value: origin };
+            uniforms["u_dir"] = { type: "v3", value: u };
+            uniforms["v_dir"] = { type: "v3", value: v };
+            uniforms["w_dir"] = { type: "v3", value: w };
+            vertexShader = shader.vertexShader;
+            vertexShader = patch_vertex_shader(vertexShader, Regular3D_Declarations, Regular3D_Core);
+            fragmentShader = shader.fragmentShader;
+            fragmentShader = patch_fragment_shader(fragmentShader);
+            shader.vertexShader = vertexShader;
+            shader.fragmentShader = fragmentShader;
+            materialShader = shader;
+            result.shader = shader;
+            result.vertexShader = vertexShader;
+            result.fragmentShader = fragmentShader;
+            result.uniforms = uniforms;
+        }
+
+        var setValue = function(value) {
+            // silently fail if shader is not initialized
+            if (uniforms) {
+                uniforms.f0.value = value;
+            }
+        };
+
+        var buffergeometry = new THREE.InstancedBufferGeometry();
+
+        // per instance
+        var ijk = [];
+        // origin, origin+v, origin+u, origin+u+v, ...
+        var fbuffer_w0 = [];
+        // origin+w, origin+v+w, origin+u+w, origin+u+v+w, ...
+        var fbuffer_w1 = [];
+
+        for (var i=0; i<nrows-1; i++) {
+            for (var j=0; j<ncols-1; j++) {
+                for (var k=0; k<ndepth-1; k++) {
+                    var uvw = [];
+                    for (var uu=0; uu<2; uu++) {
+                        for (var vv=0; vv<2; vv++) {
+                            uvw.push(values[i+uu][j+vv][k]);
+                            uvw.push(values[i+uu][j+vv][k+1]);
+                        }
+                    }
+                    if ((!limits) || (inrange(limits, uvw))) {
+                        fbuffer_w0.push(uvw[0], uvw[2], uvw[4], uvw[6]);
+                        fbuffer_w1.push(uvw[1], uvw[3], uvw[5], uvw[7]);
+                        ijk.push(i, j, k);
+                    }
+                }
+            }
+        }
+
+        var ijk_b = new THREE.InstancedBufferAttribute(new Float32Array(ijk), 3 );
+        buffergeometry.addAttribute("ijk", ijk_b);
+        var w0_b = new THREE.InstancedBufferAttribute(new Float32Array(fbuffer_w0), 4 );
+        buffergeometry.addAttribute("fbuffer_w0", w0_b);
+        var w1_b = new THREE.InstancedBufferAttribute(new Float32Array(fbuffer_w1), 4 );
+        buffergeometry.addAttribute("fbuffer_w1", w1_b);
+
+        // per mesh
+        var indices = [];
+        var positions = [];
+        for (var tetra=0; tetra<6; tetra++) {
+            for (var triangle=0; triangle<2; triangle++) {
+                for (var vertex=0; vertex<3; vertex++) {
+                    indices.push(vertex, triangle, tetra);
+                    positions.push(origin.x, origin.y, origin.z);
+                }
+            }
+        }
+        var indices_b = new THREE.Float32BufferAttribute( indices, 3 );
+        buffergeometry.addAttribute("indices", indices_b);
+        var position_b = new THREE.Float32BufferAttribute( positions, 3 );
+        buffergeometry.addAttribute("position", position_b);
+
+        var object = new THREE.Mesh( buffergeometry, material );
+        result.object = object;
+        result.geometry = buffergeometry;
+        result.material = material;
+        result.materialShader = materialShader;
+        result.vertexShader = vertexShader;
+        result.fragmentShader = fragmentShader;
+        result.uniforms = uniforms;
+        result.setValue = setValue;
+        return result;
+    };
 
     // Exported functionality:
     var contourist = {
@@ -804,7 +998,8 @@
         Irregular3D: Irregular3D,
         Triangular: Triangular,
         Irregular2D: Irregular2D,
-        Regular2D: Regular2D
+        Regular2D: Regular2D,
+        Regular3D: Regular3D
     };
 
     if( typeof exports !== 'undefined' ) {
