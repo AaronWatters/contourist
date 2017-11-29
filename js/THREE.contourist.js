@@ -284,16 +284,27 @@
     var patch_vertex_shader = function(
         source_shader,
         added_global_declarations,
-        added_initial_calculations
+        added_initial_calculations,
+        intensities
     ) {
         if (!source_shader.includes(shader_program_start)) {
             throw new Error("Cannot find program start in source shader for patching.");
         }
+        var intensity_declaration = "";
+        var color_calculation = "    contourist_color = vec4(1,1,1,1);"
+        if (intensities) {
+            intensity_declaration = "attribute float c_intensity;"
+            //color_calculation = "    contourist_color = vec4(c_intensity, c_intensity, c_intensity, 1);"
+            color_calculation = "    contourist_color = vec4((vec3(0,1,1) * c_intensity + vec3(1,0,1) * (1.0-c_intensity)), 1);"
+        }
         var initial_patch = [
             added_global_declarations, 
             "varying float visible;  // contourist visibility flag.",
+            "varying vec4 contourist_color; // contourist color",
+            intensity_declaration,
             interpolate0code,
             shader_program_start, 
+            color_calculation,
             added_initial_calculations
         ].join("\n");
         var patched_shader = source_shader.replace(shader_program_start, initial_patch);
@@ -319,12 +330,13 @@
 
     var visibility_patch = `
     varying float visible;
+    varying vec4 contourist_color;
 
     void main() {
         if (visible<1.0) {
             discard;
         }`;
-    var patch_fragment_shader = function(source_shader) {
+    var patch_fragment_shader = function(source_shader, colors) {
         if (!source_shader.includes(shader_program_start)) {
             throw new Error("Cannot find program start in fragment shader for patching.");
         }
@@ -333,6 +345,15 @@
         var normal_fragment = THREE.ShaderChunk["normal_fragment"];
         normal_fragment = normal_fragment.replace("gl_FrontFacing", "true");
         patched_shader = patched_shader.replace("#include <normal_fragment>", normal_fragment);
+        if (colors) {
+            patched_shader = patched_shader.trim();
+            // assuming there is no commented bracket past the end!!!
+            var end_index = patched_shader.lastIndexOf("}");
+            var before = patched_shader.substring(0, end_index);
+            var after = patched_shader.substring(end_index);
+            var insertion = "    gl_FragColor *= contourist_color;"
+            patched_shader = [before, insertion, after].join("\n");
+        }
         return patched_shader;
     };
 
@@ -883,7 +904,7 @@
         return result;
     };
 
-    var Regular3D = function(values, value, origin, u, v, w, material, limits) {
+    var Regular3D = function(values, value, origin, u, v, w, material, limits, intensities) {
         var nrows = values.length;
         var ncols = values[0].length;
         var ndepth = values[0][0].length;
@@ -900,6 +921,7 @@
                 }
             }
         }
+        // xxx intensities should have same shape sd as values if present.
         origin = default_vector3(origin, 0, 0, 0);
         u = default_vector3(u, 1, 0, 0);
         v = default_vector3(v, 0, 1, 0);
@@ -923,9 +945,9 @@
             uniforms["v_dir"] = { type: "v3", value: v };
             uniforms["w_dir"] = { type: "v3", value: w };
             vertexShader = shader.vertexShader;
-            vertexShader = patch_vertex_shader(vertexShader, Regular3D_Declarations, Regular3D_Core);
+            vertexShader = patch_vertex_shader(vertexShader, Regular3D_Declarations, Regular3D_Core, intensities);
             fragmentShader = shader.fragmentShader;
-            fragmentShader = patch_fragment_shader(fragmentShader);
+            fragmentShader = patch_fragment_shader(fragmentShader, intensities);
             shader.vertexShader = vertexShader;
             shader.fragmentShader = fragmentShader;
             materialShader = shader;
@@ -950,6 +972,8 @@
         var fbuffer_w0 = [];
         // origin+w, origin+v+w, origin+u+w, origin+u+v+w, ...
         var fbuffer_w1 = [];
+        // intensities, only if defined.
+        var intensity_buffer = []
 
         for (var i=0; i<nrows-1; i++) {
             for (var j=0; j<ncols-1; j++) {
@@ -965,6 +989,9 @@
                         fbuffer_w0.push(uvw[0], uvw[2], uvw[4], uvw[6]);
                         fbuffer_w1.push(uvw[1], uvw[3], uvw[5], uvw[7]);
                         ijk.push(i, j, k);
+                        if (intensities) {
+                            intensity_buffer.push(intensities[i][j][k]);
+                        }
                     }
                 }
             }
@@ -976,6 +1003,10 @@
         buffergeometry.addAttribute("fbuffer_w0", w0_b);
         var w1_b = new THREE.InstancedBufferAttribute(new Float32Array(fbuffer_w1), 4 );
         buffergeometry.addAttribute("fbuffer_w1", w1_b);
+        if (intensities) {
+            var i_b = new THREE.InstancedBufferAttribute(new Float32Array(intensity_buffer), 1 );
+            buffergeometry.addAttribute("c_intensity", i_b);
+        }
 
         // per mesh
         var indices = [];
