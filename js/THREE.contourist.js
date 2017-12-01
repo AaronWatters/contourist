@@ -85,6 +85,18 @@
     attribute vec4 fbuffer_w0, fbuffer_w1;
     `; 
 
+    var Slicer_Declarations = `
+    // Slicer declarations
+    uniform vec3 plane_point, plane_normal, origin, u_dir, v_dir, w_dir;
+    attribute vec3 ijk, indices, c_color;
+
+    float plane_offset(in vec3 xyz) {
+        //return xyz.z - 0.5; // DEBUG!!!
+        vec3 from_plane_point = xyz - plane_point;
+        return dot(from_plane_point, plane_normal);
+    }
+    `;
+
     var Irregular3D_Core = `
     visible = 0.0;  // default to invisible.
     vec3 override_vertex = vec3(0, 0, 0);  // degenerate default.
@@ -205,11 +217,34 @@
         } else {
             override_normal = test_normal;
         }
-        //override_normal = vec3(1, 0, 0); // XXXX DEBUG
-        //if (triangle < 0.5) {
-        //    override_normal = - override_normal;
-        //}
     }
+
+    // DEBUGGING HACK
+    /*
+    visible = 1.09;
+    override_vertex = ll;
+    override_vertex = plane_point;
+    contourist_color = vec4(1,1,1,1);
+    override_normal = vec3(1,1,1);
+    if (point_index < 0.5) {
+        override_vertex = ll + u_dir;
+        contourist_color = vec4(1,0,1,1);
+        override_vertex = plane_point + plane_normal;
+    } else if (point_index > 1.5) {
+        if (triangle < 0.5) {
+            override_vertex = ll + v_dir;
+            //override_vertex = vec3(3,-3,-3);
+            contourist_color = vec4(0,1,1,1);
+        } else {
+            override_vertex = ll + w_dir;
+            //override_vertex = vec3(-3,3,-3);
+            contourist_color = vec4(0,0,1,1);
+        }
+    }
+    */
+    //contourist_color = vec4(1,1,1,1);
+    
+    // END OF DEBUG HACK
     `;
 
     var Regular3D_Core = `
@@ -276,6 +311,25 @@
     }
     vec4 fABCD = vec4(f_A, f_B, f_C, f_D);
     ` + Irregular3D_Core;  // XXXXX
+
+    var Slicer_Core = `
+    contourist_color = vec4(c_color, 1.0);
+    //contourist_color = vec4(1,1,1,1);  // DEBUG!!
+    float f0 = 0.0;
+    vec3 ll = origin + ijk[0] * u_dir + ijk[1] * v_dir + ijk[2] * w_dir;
+    vec4 fbuffer_w0 = vec4(
+        plane_offset(ll), 
+        plane_offset(ll + v_dir), 
+        plane_offset(ll + u_dir), 
+        plane_offset(ll + u_dir + v_dir)
+    );
+    vec4 fbuffer_w1 = vec4(
+        plane_offset(ll + w_dir), 
+        plane_offset(ll + v_dir + w_dir), 
+        plane_offset(ll + u_dir + w_dir), 
+        plane_offset(ll + u_dir + v_dir + w_dir)
+    );
+    ` + Regular3D_Core;
 
     var shader_program_start = 'void main() {';
 
@@ -1036,6 +1090,140 @@
         return result;
     };
 
+    var Slicer = function(
+        values, 
+        plane_point, 
+        plane_normal, 
+        origin, u, v, w, 
+        material, 
+        limits, 
+        colors) {
+        var nrows = values.length;
+        var ncols = values[0].length;
+        var ndepth = values[0][0].length;
+        // validate
+        for (var i=0; i<nrows; i++) {
+            var row = values[i];
+            if (row.length != ncols) {
+                throw new Error("all rows must have the same length.");
+            }
+            for (var j=0; j<ncols; j++) {
+                var depth = row[j];
+                if (depth.length != ndepth) {
+                    throw new Error("all depths must have the same length.");
+                }
+            }
+        }
+        // xxx colors should have similar shape sd as values if present.
+        plane_point = default_vector3(plane_point, 1, 1, 1); // ???
+        plane_normal = default_vector3(plane_normal, 1, 1, 1);
+        origin = default_vector3(origin, 0, 0, 0);
+        u = default_vector3(u, 1, 0, 0);
+        v = default_vector3(v, 0, 1, 0);
+        w = default_vector3(w, 0, 0, 1);
+        debugger;
+        if (!material) {
+            material = new THREE.MeshBasicMaterial();
+        }
+        material.side = THREE.DoubleSide;
+        var materialShader;
+        var uniforms;
+        var vertexShader;
+        var fragmentShader;
+        var result = {};
+
+        material.onBeforeCompile = function ( shader ) {            
+            uniforms = shader.uniforms;
+            uniforms["plane_point"] = { type: "v3", value: plane_point };
+            uniforms["plane_normal"] = { type: "v3", value: plane_normal };
+            uniforms["origin"] = { type: "v3", value: origin };
+            uniforms["u_dir"] = { type: "v3", value: u };
+            uniforms["v_dir"] = { type: "v3", value: v };
+            uniforms["w_dir"] = { type: "v3", value: w };
+            vertexShader = shader.vertexShader;
+            vertexShader = patch_vertex_shader(vertexShader, Slicer_Declarations, Slicer_Core, null);
+            fragmentShader = shader.fragmentShader;
+            fragmentShader = patch_fragment_shader(fragmentShader, colors);
+            shader.vertexShader = vertexShader;
+            shader.fragmentShader = fragmentShader;
+            materialShader = shader;
+            result.shader = shader;
+            result.vertexShader = vertexShader;
+            result.fragmentShader = fragmentShader;
+            result.uniforms = uniforms;
+        }
+
+        var setPlane = function(px, py, pz, nx, ny, nz) {
+            // silently fail if shader is not initialized
+            if (uniforms) {
+                uniforms.plane_point.value = THREE.Vector3(px, py, pz);
+                uniforms.plane_normal.value = THREE.Vector3(nx, ny, nz);
+            }
+        };
+
+        // per instance
+        var ijk = [];
+        // intensities, only if defined.
+        var colors_buffer = []
+
+        for (var i=0; i<nrows-1; i++) {
+            for (var j=0; j<ncols-1; j++) {
+                for (var k=0; k<ndepth-1; k++) {
+                    var uvw = [];
+                    for (var uu=0; uu<2; uu++) {
+                        for (var vv=0; vv<2; vv++) {
+                            uvw.push(values[i+uu][j+vv][k]);
+                            uvw.push(values[i+uu][j+vv][k+1]);
+                        }
+                    }
+                    if ((!limits) || (inrange(limits, uvw))) {
+                        ijk.push(i, j, k);
+                        if (colors) {
+                            var c = colors[i][j][k];
+                            colors_buffer.push(c[0], c[1], c[2]);
+                        } else {
+                            var intensity = values[i][j][k];
+                            colors_buffer.push(intensity, intensity, intensity);
+                        }
+                    }
+                }
+            }
+        }
+
+        var buffergeometry = new THREE.InstancedBufferGeometry();        
+        var ijk_b = new THREE.InstancedBufferAttribute(new Float32Array(ijk), 3 );
+        buffergeometry.addAttribute("ijk", ijk_b);
+        var colors_b = new THREE.InstancedBufferAttribute(new Float32Array(colors_buffer), 3 );
+        buffergeometry.addAttribute("c_color", colors_b);
+
+        // per mesh
+        var indices = [];
+        var positions = [];
+        for (var tetra=0; tetra<6; tetra++) {
+            for (var triangle=0; triangle<2; triangle++) {
+                for (var vertex=0; vertex<3; vertex++) {
+                    indices.push(vertex, triangle, tetra);
+                    positions.push(origin.x, origin.y, origin.z);
+                }
+            }
+        }
+        var indices_b = new THREE.Float32BufferAttribute( indices, 3 );
+        buffergeometry.addAttribute("indices", indices_b);
+        var position_b = new THREE.Float32BufferAttribute( positions, 3 );
+        buffergeometry.addAttribute("position", position_b);
+
+        var object = new THREE.Mesh( buffergeometry, material );
+        result.object = object;
+        result.geometry = buffergeometry;
+        result.material = material;
+        result.materialShader = materialShader;
+        result.vertexShader = vertexShader;
+        result.fragmentShader = fragmentShader;
+        result.uniforms = uniforms;
+        result.setPlane = setPlane;
+        return result;
+    };
+
     // Exported functionality:
     var contourist = {
         Tetrahedral: Tetrahedral,
@@ -1043,7 +1231,8 @@
         Triangular: Triangular,
         Irregular2D: Irregular2D,
         Regular2D: Regular2D,
-        Regular3D: Regular3D
+        Regular3D: Regular3D,
+        Slicer: Slicer
     };
 
     if( typeof exports !== 'undefined' ) {
