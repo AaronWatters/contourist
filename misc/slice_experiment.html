@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - custom attributes [lines]</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #ffffff;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+
+				background-color: #000000;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				color: #fff;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+				z-index:100;
+			}
+
+		</style>
+	</head>
+
+	<body>
+		<div id="info"><a href="http://threejs.org" target="_blank">three.js</a> - custom attributes example</div>
+		<div id="container"></div>
+
+		// https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.js
+		// ../js/three.js
+		<script src="../js/three.js"></script>
+
+		<script src="../js/THREE.contourist.js"></script>
+
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+		<script>
+
+		// if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+		var renderer, scene, camera;
+
+		var object, uniforms;
+		var info;
+		var minf, maxf;
+		var array;
+		var intensities;
+debugger;
+		function on_load(data) {
+			array = data;
+			init();
+			animate();
+		}
+		function on_load_failure() {
+			alert("Could not load local JSON data.\n" +
+			      "You may need to run a web server to avoid cross origin restrictions.")
+		}
+		function on_load_intensities(data) {
+			intensities = data;
+			jQuery.getJSON("samples.json", on_load).fail(on_load_failure);
+		}
+		jQuery.getJSON("intensities.json", on_load_intensities).fail(on_load_failure);
+
+		function init() {
+			//debugger;
+
+			// local hack:
+			THREE.DEBUG = true;
+
+			camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 10000 );
+			camera.position.z = -13;
+			camera.position.y = -6;
+			camera.position.x = 17;
+			camera.lookAt(new THREE.Vector3(0,0,0));
+
+			scene = new THREE.Scene();
+
+			//var array = [];
+			//value = 0.8
+			var f = function(x, y, z) {
+				var a = Math.sin(x + Math.sin(y)) + Math.sin(y + Math.sin(z)) + Math.sin(z/(x+9));
+				return (a + 3)/6.0;
+			};
+			minf = array[0][0][0];
+			maxf = minf;
+			var nrows = array.length;
+			var ncols = array[0].length;
+			var ndepth = array[0][0].length;
+			var di = 2.0 * Math.PI /nrows;
+			var dj = 2.0 * Math.PI /ncols;
+			var dk = 2.0 * Math.PI /ndepth;
+			for (var i=0; i<nrows; i++) {
+				for (var j=0; j<ncols; j++) {
+					for (var k=0; k<ndepth; k++) {
+						var fijk = array[i][j][k];
+						minf = Math.min(minf, fijk);
+						maxf = Math.max(maxf, fijk);
+					}
+				}
+			}
+			var plane_point = [0,0,0];
+			var plane_normal = [-1,-1,-1];
+			var colors = [];
+			for (var i=0; i<nrows; i++) {
+				cr = [];
+				for (var j=0; j<ncols; j++) {
+					var cc = [];
+					for (var k=0; k<ndepth; k++) {
+						var fijk = intensities[i][j][k];
+						cc.push([fijk, fijk, 1-fijk]);
+					}
+					cr.push(cc);
+				}
+				colors.push(cr);
+			}
+			var truncate = (maxf - minf) * 0.022;
+			var value = (maxf - minf) * 0.5
+			var tmax = maxf - truncate;
+			var tmin = minf + truncate;
+			var limits = [tmin, tmax];
+			minf = 2000;
+			maxf = 16000;
+			limits = [minf, maxf];
+			limits = null;
+			//var material = null;
+			//var material = material = new THREE.MeshNormalMaterial();
+			var material = new THREE.MeshBasicMaterial();
+			//var material = new THREE.MeshPhongMaterial( { color: 0xffffff, flatShading: true, overdraw: 0.5, shininess: 0 } );
+			//material.lights = true;
+			origin = [-3,6,-3];
+			var u = [0,-di*2,0];
+			var v = [dj,0,0];
+			var w = [0,0,dk];
+			// XXX hack the parameters
+			/*
+			plane_point = [0.75, 0.55, 0.35];
+			plane_normal = [-0.234, 0.2, 0.7];
+			origin = [0, 0, 0];
+			u = [1, 0, 0];
+			v = [0, 1, 0];
+			w = [0, 0, 1];
+			array = [];
+			colors = [];
+			limits = null;
+			nrows = ncols = ndepth = 3;
+			for (var i=0; i<nrows; i++) {
+				var ar = []
+				var cr = [];
+				for (var j=0; j<ncols; j++) {
+					var ac = []
+					var cc = [];
+					for (var k=0; k<ndepth; k++) {
+						ac.push((i + j + k) % 2)
+						cc.push([ (i%2)*0.5 + 0.5, (j%2)*0.5 + 0.5, (k%2)*0.5 + 0.5]);
+					}
+					ar.push(ac);
+					cr.push(cc);
+				}
+				array.push(ar)
+				colors.push(cr);
+			}
+			debugger;
+			*/
+			// XXX end of hack
+			info = THREE.contourist.Slicer(
+				array,
+				plane_point,
+				plane_normal,
+				origin, u, v, w,
+				material,
+				limits,
+				colors
+			);
+			//info = THREE.contourist.Regular3D(array, value, origin, u, v, w, material, limits, intensities);
+			scene.add(info.object);
+
+			// XXXX
+			/*
+			var geometry = new THREE.BoxBufferGeometry( 2, 2, 2 );
+			var material = new THREE.MeshPhongMaterial( { color: 0xffffff, flatShading: true, overdraw: 0.5, shininess: 0 } );
+			mesh = new THREE.Mesh( geometry, material );
+			scene.add( mesh );
+			*/
+
+			var directionalLight = new THREE.DirectionalLight( 0xffffff );
+			directionalLight.position.set( 0, -70, 100 ).normalize();
+			scene.add(directionalLight);
+			//directionalLight = new THREE.DirectionalLight( 0xff00ff );
+			//directionalLight.position.set( -70, 100, 0 ).normalize();
+			//scene.add(directionalLight);
+			directionalLight = new THREE.DirectionalLight( 0xff3355 );
+			directionalLight.position.set( 70, -100, 100 ).normalize();
+			scene.add(directionalLight);
+			var light = new THREE.AmbientLight( 0x404040 ); // soft white light
+			scene.add( light );
+
+			//var spotLight = new THREE.SpotLight(0xffffff);
+			//spotLight.position.set(-150, 170, 160);
+			//spotLight.intensity = 1;
+			//scene.add(spotLight);
+
+			new THREE.DirectionalLight( 0xffffff, 0.5 );
+
+			renderer = new THREE.WebGLRenderer( { antialias: true } );
+			renderer.setClearColor( 0x050505 );
+			renderer.setPixelRatio( window.devicePixelRatio );
+			renderer.setSize( window.innerWidth, window.innerHeight );
+
+			var container = document.getElementById( 'container' );
+			container.appendChild( renderer.domElement );
+
+			window.addEventListener( 'resize', onWindowResize, false );
+
+		}
+
+		function onWindowResize() {
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize( window.innerWidth, window.innerHeight );
+
+		}
+
+		function animate() {
+
+			//requestAnimationFrame( animate );
+
+			render();
+			//stats.update();
+			requestAnimationFrame( animate );
+
+		}
+
+		function render() {
+
+			var time = Date.now() * 0.001;
+
+			var speed = 0.5;
+			info.object.rotation.y = speed * time;
+			// first time uniforms will not be initialized.
+			if (info.uniforms) {
+				//info.uniforms.f0.value = (minf + (Math.sin( 0.5 * time ) * 0.5 + 0.5) * (maxf - minf));
+				//info.uniforms.opacity.value = Math.cos( 3 * time ) * 0.5 + 0.5;
+				info.uniforms.plane_normal.value = new THREE.Vector3(1 + Math.sin(time), Math.cos(time*0.1233), Math.cos(time*0.01+1));
+			}
+			renderer.render( scene, camera );
+
+		}
+
+
+	</script>
+
+</body>
+
+</html>
