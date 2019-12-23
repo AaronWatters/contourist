@@ -147,7 +147,7 @@ def nearly_flat(p0, p1, points, minimum_extent, minimum_ratio):
     try:
         fit = flatten(fit_points)
     except:
-        print "failed to flatten", fit_points
+        #print "failed to flatten", fit_points
         raise
     projection = fit["projection"]
     p0_proj, p1_proj = projection[:2]

@@ -11,10 +11,10 @@
 # 
 
 import numpy as np
-import grid_field
-import triangulated
-import surface_geometry
-import lp_tools
+from . import grid_field
+from . import triangulated
+from . import surface_geometry
+from . import lp_tools
 
 # cube coordinates
 A = (0, 0, 0)
@@ -191,7 +191,7 @@ class GridContour(object):
         "combine interpolation points that are very close together."
         expander = ((divisions * 1.0) / self.corner).astype(np.int)
         interpolated = self.interpolated_contour_pairs
-        pairs = interpolated.keys()
+        pairs = list(interpolated.keys())
         interpolations = [interpolated[p] for p in pairs]
         quantized = [tuple((interpolation * expander).astype(np.int)) for interpolation in interpolations]
         # qmap unifies close interpolations
@@ -209,8 +209,8 @@ class GridContour(object):
             new_simplex_set = frozenset(pair_map[p] for p in simplex_set)
             if len(new_simplex_set) == len(simplex_set):
                 new_simplex_sets.add(new_simplex_set)
-        print "quantized", len(interpolated) - len(new_interpolated), "interpolations"
-        print "quantized", len(simplex_sets) - len(new_simplex_sets), "simplices"
+        #print "quantized", len(interpolated) - len(new_interpolated), "interpolations"
+        #print "quantized", len(simplex_sets) - len(new_simplex_sets), "simplices"
         self.interpolated = new_interpolated
         self.simplex_sets = new_simplex_sets
 
@@ -244,7 +244,7 @@ class GridContour(object):
         collapsed = 0
         unvisited_segments = set(segments.keys())
         visited_segments = set()
-        print "flattening", len(unvisited_segments), "segments"
+        #print "flattening", len(unvisited_segments), "segments"
         while unvisited_segments:
             segment = (pair1, pair2) = unvisited_segments.pop()
             visited_segments.add(segment)
@@ -261,8 +261,8 @@ class GridContour(object):
                     # possibly remove pair2 -- swap
                     (pair1, pair2) = (pair2, pair1)
             count += 1
-            if count % 1000 == 0:
-                print "flattening at", count, collapsed, len(unvisited_segments), len(visited_segments)
+            #if count % 1000 == 0:
+            #    print "flattening at", count, collapsed, len(unvisited_segments), len(visited_segments)
             adjacent = (pair_adjacency[pair1] | pair_adjacency[pair2]) - set([pair1, pair2])
             p1 = interpolated[pair1]
             p2 = interpolated[pair2]
@@ -317,7 +317,7 @@ class GridContour(object):
             if len(indices) == len(simplex_set):
                 keep_simplex = frozenset(pairs[index] for index in indices)
                 keep_simplex_sets.add(keep_simplex)
-        print "flattened", len(simplex_sets) - len(keep_simplex_sets), "simplices leaving", len(keep_simplex_sets)
+        #print "flattened", len(simplex_sets) - len(keep_simplex_sets), "simplices leaving", len(keep_simplex_sets)
         self.simplex_sets = keep_simplex_sets
         # keep only interpolations that are in use.
         keep_interpolations = {}
@@ -329,7 +329,7 @@ class GridContour(object):
     def smooth_interpolations(self, factor):
         simplex_sets = self.simplex_sets
         interpolated = self.interpolated_contour_pairs
-        print "smoothing", len(interpolated)
+        #print "smoothing", len(interpolated)
         #pairs = interpolated.keys()
         #pair_to_index = {pair: index for (index, pair) in enumerate(pairs)}
         pair_adjacency = {pair: set() for pair in interpolated}
@@ -371,7 +371,7 @@ class GridContour(object):
             else:
                 keep_simplex_sets.add(simplex)
         self.collapsed_simplices = count
-        print "collapsed", count, "simplices"
+        #print "collapsed", count, "simplices"
         self.simplex_sets = keep_simplex_sets
 
     def check_callback(self):

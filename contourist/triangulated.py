@@ -5,7 +5,7 @@ Triangulated 2d contours.
 # xxxx add caching for expensive function
 
 import numpy as np
-import field2d
+#import field2d
 
 adjacent_offsets = [
     (0,1), (1,1), (1,0), (0,-1), (-1,-1), (-1,0),
@@ -378,4 +378,4 @@ class Grid2DContour(object):
         return result
 
 if __name__ == "__main__":
-    print svg_demo()
+    print (svg_demo())
